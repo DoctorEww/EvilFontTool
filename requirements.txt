@@ -1,0 +1,3 @@
+fontTools
+python-docx
+brotli
