@@ -6,13 +6,12 @@ EvilFontTool hides machine-readable text inside a document that displays complet
 
 ## Evil Font Demo !!DON'T MISS THIS!!
 
-**[View the Demo →](#)** *(hosted on GitHub Pages)*
+**[View the Demo → Coming Soon](#)** *(hosted on GitHub Pages)*
 
 ---
 
 ## Table of Contents
 
-- [How It Works](#how-it-works)
 - [Installation](#installation)
 - [Usage](#usage)
 - [Ethical Use & Disclaimer](#ethical-use--disclaimer)
