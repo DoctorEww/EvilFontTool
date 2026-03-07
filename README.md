@@ -6,7 +6,7 @@ EvilFontTool hides machine-readable text inside a document that displays complet
 
 ## Evil Font Demo !!DON'T MISS THIS!!
 
-**[View the Demo → Coming Soon](#)** *(hosted on GitHub Pages)*
+**[View the Demo → Here](https://doctoreww.github.io/EvilFontTool/)** *(hosted on GitHub Pages)*
 
 ---
 
@@ -38,6 +38,16 @@ pip install fonttools python-docx
 - `python-docx` — DOCX generation
 
 ---
+## Where can I find fonts to use?
+
+* Ubuntu: `/usr/share/fonts`
+* Windows: `C:\Windows\Fonts`
+* https://fonts.google.com/
+* The internet??
+
+
+---
+
 
 ## Usage
 
