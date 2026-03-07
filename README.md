@@ -2,7 +2,7 @@
 
 > **A font-based deception tool for red teaming, security research, and whatever else.**
 
-EvilFontTool hides machine-readable text inside a document that displays completely different text to a human reader. It does this using **Evil Fonts** — fonts that intentionally deceive the viewer by rendering a different letter than understood by a computer. By remapping font glyphs, the document's visible characters show humans one thing while AI systems, OCR, and clipboard paste see another.
+EvilFontTool hides machine-readable text inside a document that displays completely different text to a human reader. It does this using **Evil Fonts** — fonts that intentionally deceive the viewer by rendering a different letter than understood by a computer. By remapping font glyphs, the document's visible characters show humans one thing while terminals, AI systems, and clipboard copy paste see another.
 
 ## Evil Font Demo !!DON'T MISS THIS!!
 
