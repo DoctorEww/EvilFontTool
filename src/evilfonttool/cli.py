@@ -1,9 +1,11 @@
 import argparse
+import logging
 import os
 import sys
 
-import evilfonttool._core as _core
 from evilfonttool._core import createfonts, createstealthfont, createhtml, create_doc
+
+logger = logging.getLogger(__name__)
 
 
 def setup_parser():
@@ -12,9 +14,10 @@ def setup_parser():
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        '-v', '--verbose',
-        action='store_true',
-        help='Enable verbose output. Without this flag the tool runs silently.',
+        '--log',
+        default='WARNING',
+        metavar='LEVEL',
+        help='Log level: DEBUG, INFO, WARNING, ERROR (default: WARNING).',
     )
     subparsers = parser.add_subparsers(dest='command', required=True)
 
@@ -66,11 +69,16 @@ def main():
     parser = setup_parser()
     args = parser.parse_args()
 
-    _core.VERBOSE = args.verbose
+    level = getattr(logging, args.log.upper(), None)
+    if not isinstance(level, int):
+        print(f"Error: invalid log level '{args.log}'. Choose from DEBUG, INFO, WARNING, ERROR.", file=sys.stderr)
+        sys.exit(1)
+
+    logging.basicConfig(level=level, format='%(message)s', stream=sys.stderr)
 
     if args.command == 'create':
         if not os.path.isfile(args.reference_font):
-            print(f"Error: '{args.reference_font}' does not exist.")
+            logger.error("'%s' does not exist.", args.reference_font)
             sys.exit(1)
 
         for subdir in ('', '/fonts', '/ttffonts'):
@@ -82,14 +90,14 @@ def main():
     elif args.command == 'web':
         for path in (args.input_human_file, args.input_computer_file):
             if not os.path.isfile(path):
-                print(f"Error: '{path}' does not exist.")
+                logger.error("'%s' does not exist.", path)
                 sys.exit(1)
         createhtml(args.input_human_file, args.input_computer_file, args.output_file)
 
     elif args.command == 'doc':
         for path in (args.input_human_file, args.input_computer_file):
             if not os.path.isfile(path):
-                print(f"Error: '{path}' does not exist.")
+                logger.error("'%s' does not exist.", path)
                 sys.exit(1)
         create_doc(
             args.input_human_file,

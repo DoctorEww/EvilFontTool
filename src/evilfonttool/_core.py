@@ -1,4 +1,5 @@
 import copy
+import logging
 import pathlib
 import string
 
@@ -6,17 +7,7 @@ from fontTools.ttLib import TTFont
 from docx import Document
 from docx.oxml.ns import qn
 
-
-# ---------------------------------------------------------------------------
-# Verbosity
-# ---------------------------------------------------------------------------
-
-VERBOSE = False
-
-
-def log(msg, verbose_only=True):
-    if not verbose_only or VERBOSE:
-        print(msg)
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +99,7 @@ def createstealthfont(reference_font, output_dir, font_name):
     # Internal font name for the stealth variant uses "0" as a sentinel
     new_name = f'{font_name} 0'
     _rename_font(font, new_name)
-    log(f"  Stealth font internal name: {new_name}")
+    logger.debug(f"  Stealth font internal name: {new_name}")
 
     # Append the @font-face CSS rule for the stealth font
     with open(f'{output_dir}/fonts.css', "a") as css_file:
@@ -125,7 +116,7 @@ def createstealthfont(reference_font, output_dir, font_name):
     font.flavor = None
     font.save(f'{output_dir}/ttffonts/0.ttf')
 
-    log(f"[DONE] stealth font -> {output_dir}/fonts/0.woff + ttffonts/0.ttf")
+    logger.debug(f"[DONE] stealth font -> {output_dir}/fonts/0.woff + ttffonts/0.ttf")
 
 
 def createfonts(reference_font, output_dir, font_name):
@@ -137,9 +128,9 @@ def createfonts(reference_font, output_dir, font_name):
 
     Also writes all @font-face rules to fonts.css (overwrites any existing file).
     """
-    log(f"Source font:  {reference_font}")
-    log(f"Output dir:   {output_dir}")
-    log(f"Characters:   {len(LETTERS)} variants to generate")
+    logger.debug(f"Source font:  {reference_font}")
+    logger.debug(f"Output dir:   {output_dir}")
+    logger.debug(f"Characters:   {len(LETTERS)} variants to generate")
 
     with open(f'{output_dir}/fonts.css', "w") as css_file:
 
@@ -206,7 +197,7 @@ def createfonts(reference_font, output_dir, font_name):
                 f'}}'
             )
 
-            log(f"  [{letter_hex}] '{currentletter}' -> {output_dir}/fonts/{letter_hex}.woff + ttffonts/{letter_hex}.ttf")
+            logger.debug(f"  [{letter_hex}] '{currentletter}' -> {output_dir}/fonts/{letter_hex}.woff + ttffonts/{letter_hex}.ttf")
 
 
 # ---------------------------------------------------------------------------
@@ -233,9 +224,9 @@ def createhtml(input_human_file, input_computer_file, output_file):
     Extra computer characters (beyond the human line length) are hidden using
     the stealth font (font-family: '0').
     """
-    log(f"Human file:    {input_human_file}")
-    log(f"Computer file: {input_computer_file}")
-    log(f"Output file:   {output_file}")
+    logger.debug(f"Human file:    {input_human_file}")
+    logger.debug(f"Computer file: {input_computer_file}")
+    logger.debug(f"Output file:   {output_file}")
 
     spans = []
     lines_processed = 0
@@ -253,18 +244,18 @@ def createhtml(input_human_file, input_computer_file, output_file):
             c_len = len(computer_line)
 
             line_number += 1
-            log(f"Human   ({h_len} chars): {human_line}")
-            log(f"Computer({c_len} chars): {computer_line}")
+            logger.debug(f"Human   ({h_len} chars): {human_line}")
+            logger.debug(f"Computer({c_len} chars): {computer_line}")
 
             if c_len < h_len:
-                log(f"  Skipping line {line_number}: computer line must be >= human line length.", verbose_only=False)
+                logger.warning(f"  Skipping line {line_number}: computer line must be >= human line length.")
                 continue
 
             # Extra computer characters are inserted at the midpoint of the human text
             diff = c_len - h_len
             mid = h_len // 2
 
-            log(f"  diff={diff}, hidden chars inserted at mid={mid}")
+            logger.debug(f"  diff={diff}, hidden chars inserted at mid={mid}")
 
             line_spans = []
             h_index = 0
@@ -289,7 +280,7 @@ def createhtml(input_human_file, input_computer_file, output_file):
             total_hidden += diff
 
     _write_html(output_file, "\n<br>\n".join(spans))
-    log(f"[DONE] HTML written -> {output_file} ({lines_processed} lines, {total_hidden} hidden chars)")
+    logger.debug(f"[DONE] HTML written -> {output_file} ({lines_processed} lines, {total_hidden} hidden chars)")
 
 
 # ---------------------------------------------------------------------------
@@ -308,10 +299,10 @@ def create_doc(input_human_file, input_computer_file, output_file, font_name_in)
 
     Lines where the computer text is shorter than the human text are skipped.
     """
-    log(f"Human file:    {input_human_file}")
-    log(f"Computer file: {input_computer_file}")
-    log(f"Output file:   {output_file}")
-    log(f"Font family:   {font_name_in}")
+    logger.debug(f"Human file:    {input_human_file}")
+    logger.debug(f"Computer file: {input_computer_file}")
+    logger.debug(f"Output file:   {output_file}")
+    logger.debug(f"Font family:   {font_name_in}")
 
     doc = Document()
     lines_processed = 0
@@ -329,17 +320,17 @@ def create_doc(input_human_file, input_computer_file, output_file, font_name_in)
             c_len = len(computer_line)
 
             line_number += 1
-            log(f"Human   ({h_len} chars): {human_line}")
-            log(f"Computer({c_len} chars): {computer_line}")
+            logger.debug(f"Human   ({h_len} chars): {human_line}")
+            logger.debug(f"Computer({c_len} chars): {computer_line}")
 
             if c_len < h_len:
-                log(f"  Skipping line {line_number}: computer line must be >= human line length.", verbose_only=False)
+                logger.warning(f"  Skipping line {line_number}: computer line must be >= human line length.")
                 continue
 
             diff = c_len - h_len
             mid = h_len // 2
 
-            log(f"  diff={diff}, hidden chars inserted at mid={mid}")
+            logger.debug(f"  diff={diff}, hidden chars inserted at mid={mid}")
 
             p = doc.add_paragraph()
             h_index = 0
@@ -369,4 +360,4 @@ def create_doc(input_human_file, input_computer_file, output_file, font_name_in)
             total_hidden += diff
 
     doc.save(output_file)
-    log(f"[DONE] DOCX written -> {output_file} ({lines_processed} lines, {total_hidden} hidden chars)")
+    logger.debug(f"[DONE] DOCX written -> {output_file} ({lines_processed} lines, {total_hidden} hidden chars)")
