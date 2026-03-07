@@ -25,12 +25,16 @@ EvilFontTool hides machine-readable text inside a document that displays complet
 
 ## Installation
 
-### Standard (Ubuntu/Debian)
-
 ```bash
 git clone https://github.com/DoctorEww/EvilFontTool.git
 cd EvilFontTool
-pip install fonttools python-docx
+pip install .
+```
+
+For development (editable install):
+
+```bash
+pip install -e .
 ```
 
 ### Dependencies
@@ -56,7 +60,7 @@ All functionality is exposed via a single CLI with three subcommands.
 ### `create` — Generate the font family for use in HTML or DOC files
 
 ```bash
-python evilfonttool.py create <reference_font> <output_dir> <font_name>
+evilfonttool create <reference_font> <output_dir> <font_name>
 ```
 
 | Argument | Description |
@@ -67,7 +71,7 @@ python evilfonttool.py create <reference_font> <output_dir> <font_name>
 
 **Example:**
 ```bash
-python evilfonttool.py create fonts/Arial.ttf output/ 'Arial'
+evilfonttool create fonts/Arial.ttf output/ 'Arial'
 ```
 
 Outputs:
@@ -80,14 +84,14 @@ Outputs:
 ### `web` — Generate an evil font HTML file
 
 ```bash
-python evilfonttool.py web <human_file> <computer_file> <output_file>
+evilfonttool web <human_file> <computer_file> <output_file>
 ```
 
 > Requires `fonts.css` and the generated fonts to be in the output directory so the HTML file can use it (or change the path in the HTML file).
 
 **Example:**
 ```bash
-python evilfonttool.py web human.txt computer.txt output/index.html
+evilfonttool web human.txt computer.txt output/index.html
 ```
 
 ---
@@ -95,14 +99,14 @@ python evilfonttool.py web human.txt computer.txt output/index.html
 ### `doc` — Generate a evil font DOCX file
 
 ```bash
-python evilfonttool.py doc <human_file> <computer_file> <output_file> <font_name>
+evilfonttool doc <human_file> <computer_file> <output_file> <font_name>
 ```
 
 > The `font_name` must match the name used in the `create` step. The TTF fonts must be installed on the system or embedded in the document. When saving the doc file you can choose in the file -> options -> save to embed the fonts in the file so its portable. 
 
 **Example:**
 ```bash
-python evilfonttool.py doc human.txt computer.txt output/secret.docx MyFont
+evilfonttool doc human.txt computer.txt output/secret.docx MyFont
 ```
 
 ---
