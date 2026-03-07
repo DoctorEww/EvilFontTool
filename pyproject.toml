@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "evilfonttool"
-version = "2.0.0"
-description = "Evil Font steganography tool for security research"
+version = "2.0.1"
+description = "A font-based deception tool for red teaming, security research, and whatever else."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.9"
@@ -14,9 +14,19 @@ dependencies = [
     "python-docx",
     "brotli",
 ]
+authors = [
+  {name = "Andrew Griess"}
+]
+keywords = ["evil font", "evil font tool", "font obfuscation", "obfuscation", "fonts", "red team", "ttf", "woff", "docx", "html"]
 
 [project.scripts]
 evilfonttool = "evilfonttool.cli:main"
+
+[project.urls]
+Homepage = "https://doctoreww.github.io/EvilFontTool/"
+Repository = "https://github.com/DoctorEww/EvilFontTool"
+Issues = "https://github.com/DoctorEww/EvilFontTool/issues"
+Demo = "https://doctoreww.github.io/EvilFontTool/"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/evilfonttool"]
