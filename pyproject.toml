@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "evilfonttool"
+version = "2.0.0"
+description = "Evil Font steganography tool for security research"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "fonttools",
+    "python-docx",
+    "brotli",
+]
+
+[project.scripts]
+evilfonttool = "evilfonttool.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/evilfonttool"]

@@ -1,7 +1,5 @@
-import argparse
-import sys
-import os
 import copy
+import pathlib
 import string
 
 from fontTools.ttLib import TTFont
@@ -13,19 +11,10 @@ from docx.oxml.ns import qn
 # Verbosity
 # ---------------------------------------------------------------------------
 
-# Set to True by passing -v / --verbose on the command line.
-# All informational output is gated through log() so silent mode is clean.
 VERBOSE = False
 
 
 def log(msg, verbose_only=True):
-    """Print msg to stdout.
-
-    If verbose_only is True (default), only prints when VERBOSE is enabled.
-    Pass verbose_only=False for messages that should always appear regardless
-    of verbosity — e.g. skipped-line warnings that affect output correctness.
-    Errors in main() always use print() directly and are never silenced.
-    """
     if not verbose_only or VERBOSE:
         print(msg)
 
@@ -48,6 +37,9 @@ LETTERS = (
 # 0 works for most renderers, but some applications may behave unexpectedly.
 WIDTH = 0
 
+# Path to the bundled HTML template.
+_TEMPLATE = pathlib.Path(__file__).parent / "data" / "template.html"
+
 
 # ---------------------------------------------------------------------------
 # Font helpers
@@ -55,7 +47,7 @@ WIDTH = 0
 
 def _get_unicode_cmap(font):
     """Return the first suitable Windows Unicode cmap subtable (format 4 or 12).
-    
+
     Raises ValueError if none is found.
     """
     for table in font['cmap'].tables:
@@ -68,7 +60,7 @@ def _get_unicode_cmap(font):
 
 def _remove_layout_tables(font):
     """Remove OpenType tables that control ligatures, kerning, and substitution.
-    
+
     These tables operate on glyph names rather than cmap entries, so they can
     override our remapping in unpredictable ways depending on surrounding characters.
     """
@@ -90,7 +82,7 @@ def _rename_font(font, new_name):
 
 def createstealthfont(reference_font, output_dir, font_name):
     """Generate a stealth font where every character renders as an invisible space.
-    
+
     The stealth font is used to hide the extra computer-file characters that
     have no corresponding human-file character to disguise themselves as.
     It is saved as both WOFF (web) and TTF (document/desktop).
@@ -138,7 +130,7 @@ def createstealthfont(reference_font, output_dir, font_name):
 
 def createfonts(reference_font, output_dir, font_name):
     """Generate one Evil Font variant per character in LETTERS.
-    
+
     In each variant, every character's glyph is replaced with the glyph for
     `currentletter`. This means that no matter what Unicode byte is stored in
     the document, the renderer will draw `currentletter` — the core Evil Font trick.
@@ -221,10 +213,9 @@ def createfonts(reference_font, output_dir, font_name):
 # HTML output
 # ---------------------------------------------------------------------------
 
-def _write_html(template_file, output_file, content):
-    """Inject `content` into the HTML template and write to `output_file`."""
-    with open(template_file, "r") as f:
-        html = f.read()
+def _write_html(output_file, content):
+    """Inject `content` into the bundled HTML template and write to `output_file`."""
+    html = _TEMPLATE.read_text()
     html = html.replace("<!-- #STUFF HERE -->", content)
     with open(output_file, "w") as f:
         f.write(html)
@@ -232,7 +223,7 @@ def _write_html(template_file, output_file, content):
 
 def createhtml(input_human_file, input_computer_file, output_file):
     """Build a steganographic HTML file from human and computer text files.
-    
+
     Each character from the computer file is wrapped in a <span> that applies
     an Evil Font chosen by the corresponding human file character. To a human
     reading the rendered page, the text looks like the human file. A machine
@@ -297,7 +288,7 @@ def createhtml(input_human_file, input_computer_file, output_file):
             lines_processed += 1
             total_hidden += diff
 
-    _write_html("template.html", output_file, "\n<br>\n".join(spans))
+    _write_html(output_file, "\n<br>\n".join(spans))
     log(f"[DONE] HTML written -> {output_file} ({lines_processed} lines, {total_hidden} hidden chars)")
 
 
@@ -307,7 +298,7 @@ def createhtml(input_human_file, input_computer_file, output_file):
 
 def create_doc(input_human_file, input_computer_file, output_file, font_name_in):
     """Build a steganographic DOCX file from human and computer text files.
-    
+
     Works identically to createhtml() but outputs a Word document. Each run is
     assigned an Evil Font by setting all four font slots (ascii, hAnsi, eastAsia,
     cs) to prevent Word from falling back to a system font.
@@ -379,110 +370,3 @@ def create_doc(input_human_file, input_computer_file, output_file, font_name_in)
 
     doc.save(output_file)
     log(f"[DONE] DOCX written -> {output_file} ({lines_processed} lines, {total_hidden} hidden chars)")
-
-
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
-
-def setup_parser():
-    parser = argparse.ArgumentParser(
-        description="Fontuscator — Evil Font steganography tool for security research.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument(
-        '-v', '--verbose',
-        action='store_true',
-        help='Enable verbose output. Without this flag the tool runs silently.',
-    )
-    subparsers = parser.add_subparsers(dest='command', required=True)
-
-    # --- create ---
-    create_parser = subparsers.add_parser(
-        'create',
-        help='Generate an Evil Font family from a reference font.',
-        description=(
-            'Produces one font variant per printable character plus a stealth font, '
-            'along with a fonts.css file for web use.'
-        ),
-    )
-    create_parser.add_argument('reference_font', help='Path to the source .ttf font file.')
-    create_parser.add_argument('output_dir',     help='Directory to write fonts and CSS into.')
-    create_parser.add_argument('font_name',      help='Internal name prefix for the font family.')
-
-    # --- web ---
-    web_parser = subparsers.add_parser(
-        'web',
-        help='Generate a steganographic HTML file.',
-        description=(
-            'Wraps computer-file characters in Evil Font spans so the page displays '
-            'human-file text visually while the raw HTML contains the computer text. '
-            'fonts.css must be present in the output directory.'
-        ),
-    )
-    web_parser.add_argument('input_human_file',    help='Text visible to human readers.')
-    web_parser.add_argument('input_computer_file', help='Text visible to machines / AI.')
-    web_parser.add_argument('output_file',         help='Path for the generated HTML file.')
-
-    # --- doc ---
-    doc_parser = subparsers.add_parser(
-        'doc',
-        help='Generate a steganographic DOCX file.',
-        description=(
-            'Produces a Word document using Evil Fonts so the displayed text differs '
-            'from the underlying Unicode. font_name must match the value used in create.'
-        ),
-    )
-    doc_parser.add_argument('input_human_file',    help='Text visible to human readers.')
-    doc_parser.add_argument('input_computer_file', help='Text visible to machines / AI.')
-    doc_parser.add_argument('output_file',         help='Path for the generated DOCX file.')
-    doc_parser.add_argument('font_name',           help='Font family name (must match create step).')
-
-    return parser
-
-
-def main():
-    parser = setup_parser()
-    args = parser.parse_args()
-
-    # Set the global verbose flag before any functions run
-    global VERBOSE
-    VERBOSE = args.verbose
-
-    if args.command == 'create':
-        if not os.path.isfile(args.reference_font):
-            print(f"Error: '{args.reference_font}' does not exist.")
-            sys.exit(1)
-
-        # Create output directories if they don't already exist
-        for subdir in ('', '/fonts', '/ttffonts'):
-            path = args.output_dir + subdir
-            if not os.path.isdir(path):
-                log(f"Creating directory: {path}")
-                os.makedirs(path, exist_ok=True)
-
-        createfonts(args.reference_font, args.output_dir, args.font_name)
-        createstealthfont(args.reference_font, args.output_dir, args.font_name)
-
-    elif args.command == 'web':
-        for path in (args.input_human_file, args.input_computer_file):
-            if not os.path.isfile(path):
-                print(f"Error: '{path}' does not exist.")
-                sys.exit(1)
-        createhtml(args.input_human_file, args.input_computer_file, args.output_file)
-
-    elif args.command == 'doc':
-        for path in (args.input_human_file, args.input_computer_file):
-            if not os.path.isfile(path):
-                print(f"Error: '{path}' does not exist.")
-                sys.exit(1)
-        create_doc(
-            args.input_human_file,
-            args.input_computer_file,
-            args.output_file,
-            args.font_name,
-        )
-
-
-if __name__ == "__main__":
-    main()
