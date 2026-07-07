@@ -3,7 +3,13 @@ import logging
 import os
 import sys
 
-from evilfonttool._core import createfonts, createstealthfont, createhtml, create_doc
+from evilfonttool._core import (
+    createfonts,
+    createstealthfont,
+    createhtml,
+    create_doc,
+    create_pdf,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +67,43 @@ def setup_parser():
     doc_parser.add_argument('input_computer_file', help='Text visible to machines / AI.')
     doc_parser.add_argument('output_file',         help='Path for the generated DOCX file.')
     doc_parser.add_argument('font_name',           help='Font family name (must match create step).')
+    doc_parser.add_argument('--author', default="anonymous",
+                            help='DOCX document author metadata (default: none).')
+
+    # --- pdf ---
+    pdf_parser = subparsers.add_parser(
+        'pdf',
+        help='Convert an Evil Font DOCX into a copy-paste-safe PDF.',
+        description=(
+            'Renders the DOCX with LibreOffice so the PDF looks identical to the '
+            'document, then overlays the hidden payload as an invisible copy layer '
+            'so it survives copy-paste in every viewer. font_name must match the '
+            'value used in create.'
+        ),
+    )
+    pdf_parser.add_argument('input_docx',  help='Path to the Evil Font DOCX (from the doc step).')
+    pdf_parser.add_argument('output_file', help='Path for the generated PDF file.')
+    # pdf_parser.add_argument('font_name',   help='Font family name (must match create step).')
+    pdf_parser.add_argument(
+        '--ttf-dir',
+        help='Directory of Evil Font TTFs (e.g. <output_dir>/ttffonts). Exposed to '
+             'LibreOffice so the disguise renders. Omit only if the fonts are '
+             'installed system-wide. Or are embedded in the file.',
+    )
+    pdf_parser.add_argument('--dpi', type=int, default=200,
+                            help='Rasterisation quality of the visible layer (default: 200).')
+    pdf_parser.add_argument('--soffice', default='soffice',
+                            help="Path to the LibreOffice binary (default: 'soffice').")
+    pdf_parser.add_argument('--ink-font', default=None,
+                            help='TTF for the invisible copy layer (default: a system sans).')
+    pdf_parser.add_argument('--title', default="Untitled",
+                            help='PDF document title metadata (default: "Untitled").')
+    pdf_parser.add_argument('--author', default=None,
+                            help='PDF document author metadata (default: none).')
+    pdf_parser.add_argument('--subject', default=None,
+                            help='PDF document subject metadata (default: none).')
+    pdf_parser.add_argument('--producer', default=None,
+                            help='PDF producer metadata (default: none).')
 
     return parser
 
@@ -104,4 +147,25 @@ def main():
             args.input_computer_file,
             args.output_file,
             args.font_name,
+            author=args.author,
+        )
+
+    elif args.command == 'pdf':
+        if not os.path.isfile(args.input_docx):
+            logger.error("'%s' does not exist.", args.input_docx)
+            sys.exit(1)
+        if args.ttf_dir and not os.path.isdir(args.ttf_dir):
+            logger.error("'%s' is not a directory.", args.ttf_dir)
+            sys.exit(1)
+        create_pdf(
+            args.input_docx,
+            args.output_file,
+            ttf_dir=args.ttf_dir,
+            dpi=args.dpi,
+            soffice=args.soffice,
+            ink_font=args.ink_font,
+            title=args.title,
+            author=args.author,
+            subject=args.subject,
+            producer=args.producer,
         )
