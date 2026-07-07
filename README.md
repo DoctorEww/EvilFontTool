@@ -85,8 +85,8 @@ The `pdf` command doesn't rely on Evil Fonts at all. It renders the DOCX to an i
 If you want a genuine Evil Font PDF, you need to build the Word doc without invisible letters (invisible letters don't survive PDF conversion). From there, export directly from Word or use "Print to PDF." This keeps everything in a single layer, giving the document different IOCs than the well-known two-layer trick used by the `pdf` command. The `pdf` command exists purely because that manual process is tedious, and sometimes you just want a quick PDF copy of a Word doc.
 
 TLDR;
-* Option 1: Use the pdf command → two-layer PDF, same mechanism as other tools (more well-known/detectable).
-* Option 2: Build a Word doc without invisible fonts, then convert via Print to PDF → more annoying, but produces different IOCs than Option 1.
+* Option 1: (easy one) Use the pdf command → two-layer PDF, same mechanism as other tools (more well-known/detectable).
+* Option 2: (real evil font one) Build a Word doc without invisible fonts, then convert via Print to PDF → more annoying, but produces different IOCs than Option 1.
 
 
 > If anyone figures out how to pull off Option 2 *with* invisible letters, I owe you a drink. Open an issue and I'll credit you in the README.
