@@ -119,7 +119,13 @@ Outputs:
 - `output/fonts.css` — `@font-face` declarations for web use
 
 ---
+### Input File Format
 
+- Plain `.txt` files, one sentence or phrase per line
+- Each line in `computer_file` must be **equal to or longer** than the corresponding line in `human_file`
+- Lines are matched positionally (line 1 to line 1, etc.)
+
+---
 ### `web` — Generate an evil font HTML file
 
 ```bash
@@ -196,13 +202,7 @@ evilfonttool pdf output/secret.docx output/secret.pdf --ttf-dir output/fonts/ttf
 
 ---
 
-### Input File Format
 
-- Plain `.txt` files, one sentence or phrase per line
-- Each line in `computer_file` must be **equal to or longer** than the corresponding line in `human_file`
-- Lines are matched positionally (line 1 to line 1, etc.)
-
----
 
 ## Ethical Use & Disclaimer
 
