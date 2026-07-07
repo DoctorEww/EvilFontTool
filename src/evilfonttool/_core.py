@@ -457,6 +457,20 @@ def _is_stealth_font(font_name):
     return base.endswith(" 0")
 
 
+def _is_decorative_glyph(char_text):
+    """True if `char_text` is a native list-bullet/symbol glyph, not payload content.
+
+    Word/LibreOffice draw list bullets (and other auto-numbering glyphs) straight
+    from the paragraph's numbering definition using a symbol font (e.g. Wingdings),
+    at render time -- that glyph never appears in any run's text, so the docx
+    parser has no way to know about it and it is absent from the payload entirely.
+    These glyphs are reliably encoded in the Unicode Private Use Area, which our
+    disguised payload characters (always plain ASCII) never use, so PUA codepoints
+    are a safe signal to exclude them from the visible glyph count.
+    """
+    return len(char_text) == 1 and 0xE000 <= ord(char_text) <= 0xF8FF
+
+
 def _paragraph_payload(paragraphs):
     """Flatten runs into the character stream we must reproduce on copy.
 
@@ -586,12 +600,15 @@ def _visible_lines(pdf_path, y_tol=3.0):
                     stack.extend(list(obj))
                 except TypeError:
                     pass
-        # A glyph is hidden if it is drawn with the stealth font (robust) or is
-        # ~zero-width (belt-and-braces). Everything else is a visible glyph, and
-        # the visible-glyph count per line is what anchors the copy layer.
+        # A glyph is hidden if it is drawn with the stealth font (robust), is
+        # ~zero-width (belt-and-braces), or is a native decorative glyph (list
+        # bullets etc.) that never appears in the payload. Everything else is a
+        # visible glyph, and the visible-glyph count per line is what anchors
+        # the copy layer.
         visible = [g for g in glyphs
                    if not _is_stealth_font(g.fontname)
-                   and (g.x1 - g.x0) > 0.1 * max(g.size, 1.0)]
+                   and (g.x1 - g.x0) > 0.1 * max(g.size, 1.0)
+                   and not _is_decorative_glyph(g.get_text())]
         # Group glyphs into rows: sort top-to-bottom (PDF y grows upward, so -y0)
         # then left-to-right, and start a new row when the baseline jumps.
         visible.sort(key=lambda g: (-g.y0, g.x0))
@@ -648,7 +665,7 @@ def _assign_payload(payload, counts):
     return buffers
 
 
-def _draw_invisible(pdf, text, box, size=12):
+def _draw_invisible(pdf, text, box, min_size=4.0, max_size=144.0):
     """Lay `text` into `box` as invisible, selectable text (the copy layer).
 
     Render mode 3 draws no ink but keeps the text fully selectable and copyable in
@@ -656,11 +673,17 @@ def _draw_invisible(pdf, text, box, size=12):
     compresses the whole string (which is longer than the visible line, since it
     also carries the hidden chars) to exactly the line's width, so it sits under
     the matching visible text with no overlap or spill.
+
+    The font size is derived from the line's own bounding-box height rather than
+    a fixed constant, so the invisible text -- and the selection highlight a
+    viewer draws for it -- roughly matches the size of the visible text underneath
+    (a heading and a footnote no longer both highlight at the same fixed size).
     """
     if not text:
         return
-    x0, y0, x1, _ = box
+    x0, y0, x1, y1 = box
     width = max(1.0, x1 - x0)
+    size = max(min_size, min(max_size, y1 - y0))
     natural = _pdfmetrics.stringWidth(text, _INK_FONT, size) or 1.0
     text_obj = pdf.beginText(x0, y0)
     text_obj.setFont(_INK_FONT, size)
