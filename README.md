@@ -14,7 +14,7 @@ EvilFontTool hides machine-readable text inside a document that displays complet
 
 - [Installation](#installation)
 - [Usage Tips](#usage-tips)
-- [PDFs Woes Explained](#pdfs-explained)
+- [PDFs Woes Explained](#pdfs-woes-explained)
 - [Usage](#usage)
 - [Ethical Use & Disclaimer](#ethical-use--disclaimer)
 - [Contributing](#contributing)
