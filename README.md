@@ -13,6 +13,8 @@ EvilFontTool hides machine-readable text inside a document that displays complet
 ## Table of Contents
 
 - [Installation](#installation)
+- [Usage Tips](#usage-tips)
+- [PDFs Explained](#pdfs-explained)
 - [Usage](#usage)
 - [Ethical Use & Disclaimer](#ethical-use--disclaimer)
 - [Contributing](#contributing)
@@ -70,10 +72,24 @@ System requirements (not installed by `pip` — must be on your `PATH`):
 
 ---
 
-## Usage tips
+## Usage Tips
 
 * Generate fonts and pdf's on Linux. Windows has not been tested. 
 * Embed fonts using Word on Windows not LibreOffice on Linux. Install the fonts to the system and then embed them with Word. After significant testing I could not get LibreOffice to embed evil fonts.
+
+## PDF's Explained
+
+The `pdf` command doesn't rely on Evil Fonts at all. It renders the DOCX to an image (so the visible page is a picture, not text), then draws the real computer text on top as fully invisible, selectable text. Copy-paste and text extraction read that invisible layer instead. There are a few other tools that can do this including <TODO>. 
+
+If you want to have a true Evil Font PDF you need to make a word doc without using invisible letters (invisible letters don't work in the PDF's). Then, you can either export the doc in word or use print to PDF. Thus the document keeps one layer and has different IOC's to the well known PDF trick used by the `pdf` command. The `pdf` command only exists because this is very tedious and sometimes I just want a PDF copy of my word docs. 
+
+TLDR;
+* Option 1: Use `pdf` command and have a two layer PDF similar to other tools. (more well known attack)
+* Option 2: Make a word doc without invisible fonts and then convert it to PDF using print to PDF. (anonnoying, but different IOC's than option 1) 
+
+
+> If someone figures out how to do option 2 with invisible letters I'll buy you a drink. Just open an issue and I'll update the readme with the steps. 
+
 
 ## Usage
 
