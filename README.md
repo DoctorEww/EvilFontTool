@@ -121,7 +121,7 @@ Outputs:
 ---
 ### Input File Format
 
-- Plain `.txt` files, one sentence or phrase per line
+- Plain `.txt` files.
 - Each line in `computer_file` must be **equal to or longer** than the corresponding line in `human_file`
 - Lines are matched positionally (line 1 to line 1, etc.)
 
