@@ -14,7 +14,7 @@ EvilFontTool hides machine-readable text inside a document that displays complet
 
 - [Installation](#installation)
 - [Usage Tips](#usage-tips)
-- [PDFs Explained](#pdfs-explained)
+- [PDFs Woes Explained](#pdfs-explained)
 - [Usage](#usage)
 - [Ethical Use & Disclaimer](#ethical-use--disclaimer)
 - [Contributing](#contributing)
@@ -75,20 +75,21 @@ System requirements (not installed by `pip` — must be on your `PATH`):
 ## Usage Tips
 
 * Generate fonts and pdf's on Linux. Windows has not been tested. 
+* The pdf command does not work on complex word documents ex. columns. Feel free to open an issue if theres a feature you really want it to support. 
 * Embed fonts using Word on Windows not LibreOffice on Linux. Install the fonts to the system and then embed them with Word. After significant testing I could not get LibreOffice to embed evil fonts.
 
-## PDF's Explained
+## PDF's Woes Explained
 
-The `pdf` command doesn't rely on Evil Fonts at all. It renders the DOCX to an image (so the visible page is a picture, not text), then draws the real computer text on top as fully invisible, selectable text. Copy-paste and text extraction read that invisible layer instead. There are a few other tools that can do this including <TODO>. 
+The `pdf` command doesn't rely on Evil Fonts at all. It renders the DOCX to an image (so the visible page is a picture, not text), then draws the real computer text on top as fully invisible, selectable text. Copy-paste and text extraction read that invisible layer instead. There are a few other tools that can do this, but nothing as easy as the `pdf` command when you already have a DOCX you like.  
 
-If you want to have a true Evil Font PDF you need to make a word doc without using invisible letters (invisible letters don't work in the PDF's). Then, you can either export the doc in word or use print to PDF. Thus the document keeps one layer and has different IOC's to the well known PDF trick used by the `pdf` command. The `pdf` command only exists because this is very tedious and sometimes I just want a PDF copy of my word docs. 
+If you want a genuine Evil Font PDF, you need to build the Word doc without invisible letters (invisible letters don't survive PDF conversion). From there, export directly from Word or use "Print to PDF." This keeps everything in a single layer, giving the document different IOCs than the well-known two-layer trick used by the `pdf` command. The `pdf` command exists purely because that manual process is tedious, and sometimes you just want a quick PDF copy of a Word doc.
 
 TLDR;
-* Option 1: Use `pdf` command and have a two layer PDF similar to other tools. (more well known attack)
-* Option 2: Make a word doc without invisible fonts and then convert it to PDF using print to PDF. (anonnoying, but different IOC's than option 1) 
+* Option 1: Use the pdf command → two-layer PDF, same mechanism as other tools (more well-known/detectable).
+* Option 2: Build a Word doc without invisible fonts, then convert via Print to PDF → more annoying, but produces different IOCs than Option 1.
 
 
-> If someone figures out how to do option 2 with invisible letters I'll buy you a drink. Just open an issue and I'll update the readme with the steps. 
+> If anyone figures out how to pull off Option 2 *with* invisible letters, I owe you a drink. Open an issue and I'll credit you in the README.
 
 
 ## Usage
