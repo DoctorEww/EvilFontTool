@@ -22,10 +22,6 @@ EvilFontTool hides machine-readable text inside a document that displays complet
 
 ---
 
-## [How It Works — Blog Post Coming Soon](#)
-
----
-
 ## Installation
 
 ```bash
@@ -55,7 +51,7 @@ System requirements (not installed by `pip` — must be on your `PATH`):
 - **[poppler-utils](https://poppler.freedesktop.org/)** — required by `pdf2image` to render PDF pages for the `pdf` command
   - Ubuntu/Debian: `sudo apt install poppler-utils`
   - macOS: `brew install poppler`
-  - Windows: [poppler for Windows](https://github.com/oschwartz10612/poppler-windows)
+  - Windows: [poppler for Windows](https://github.com/oschwartz10612/poppler-windows) (add the Library\bin folder to path)
 - **[LibreOffice](https://www.libreoffice.org/)** — required for the `pdf` command, which shells out to `soffice --headless` to convert DOCX to PDF
   - Ubuntu/Debian: `sudo apt install libreoffice`
   - macOS: `brew install --cask libreoffice`
@@ -76,7 +72,7 @@ System requirements (not installed by `pip` — must be on your `PATH`):
 
 * Generate fonts and pdf's on Linux. Windows has not been tested. 
 * The pdf command does not work on complex word documents ex. columns. Feel free to open an issue if theres a feature you really want it to support. 
-* Embed fonts using Word on Windows not LibreOffice on Linux. Install the fonts to the system and then embed them with Word. After significant testing I could not get LibreOffice to embed evil fonts.
+* To embed fonts, use `doc --ttf-dir <ttffonts_dir>` (EvilFontTool embeds them itself) or Word on Windows. LibreOffice's own "embed fonts" option does not work for Evil Fonts.
 
 ## PDF's Woes Explained
 
@@ -150,12 +146,12 @@ evilfonttool web human.txt computer.txt output/index.html
 ### `doc` — Generate a evil font DOCX file
 
 ```bash
-evilfonttool doc <human_file> <computer_file> <output_file> <font_name> [--author AUTHOR]
+evilfonttool doc <human_file> <computer_file> <output_file> <font_name> [--author AUTHOR] [--ttf-dir DIR]
 ```
 
-> The `font_name` must match the name used in the `create` step. The TTF fonts must be installed on the system or embedded in the document. When saving the doc file you can choose in the file -> options -> save to embed the fonts in the file so its portable. 
+> The `font_name` must match the name used in the `create` step. The TTF fonts must be installed on the system, embedded via `--ttf-dir`, or embedded manually in Word (file -> options -> save -> embed fonts) for the deception to render correctly.
 
-There is an issue with saving fonts inside LibreOffice. I have only had success in word. If you figure out how to embed the fonts in LibreOffice successfully please make an edit to this readme.
+Word's own "embed fonts" save option works fine, but LibreOffice's does not -- I could never get it to embed Evil Fonts correctly. Pass `--ttf-dir` instead: EvilFontTool embeds the fonts itself, directly into the `.docx`, without relying on Word or LibreOffice's embedding at all.
 
 | Argument | Description |
 |---|---|
@@ -164,10 +160,11 @@ There is an issue with saving fonts inside LibreOffice. I have only had success 
 | `output_file` | Path for the generated DOCX file |
 | `font_name` | Font family name (must match `create` step) |
 | `--author` | DOCX document author metadata (default: none) |
+| `--ttf-dir` | Directory of Evil Font TTFs (e.g. `<output_dir>/ttffonts`). If given, the fonts actually used are embedded directly into the `.docx`, so the deception renders correctly without installing them system-wide. Only embeds letters included in the human file. |
 
 **Example:**
 ```bash
-evilfonttool doc human.txt computer.txt output/secret.docx MyFont --author "Finance Team"
+evilfonttool doc human.txt computer.txt output/secret.docx MyFont --author "Finance Team" --ttf-dir output/ttffonts
 ```
 
 ---
@@ -178,7 +175,7 @@ evilfonttool doc human.txt computer.txt output/secret.docx MyFont --author "Fina
 evilfonttool pdf <input_docx> <output_file> [--ttf-dir DIR] [--dpi DPI] [--soffice PATH] [--ink-font FONT] [--title TITLE] [--author AUTHOR] [--subject SUBJECT] [--producer PRODUCER]
 ```
 
-Renders the DOCX with LibreOffice so the PDF looks identical to the document, then overlays the hidden payload as an invisible copy layer so it survives copy-paste in every viewer (including poppler-based ones).
+Renders the DOCX with LibreOffice so the PDF looks identical to the document, then overlays the hidden payload as an invisible copy layer so it survives copy-paste in every viewer.
 
 | Argument | Description |
 |---|---|

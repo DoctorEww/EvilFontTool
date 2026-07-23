@@ -69,6 +69,13 @@ def setup_parser():
     doc_parser.add_argument('font_name',           help='Font family name (must match create step).')
     doc_parser.add_argument('--author', default="anonymous",
                             help='DOCX document author metadata (default: none).')
+    doc_parser.add_argument(
+        '--ttf-dir',
+        help='Directory of Evil Font TTFs (e.g. <output_dir>/ttffonts). If given, '
+             'the fonts actually used are embedded directly into the .docx, so '
+             'the deception renders correctly without installing them system-wide.'
+             'Only embeds letters included in the human file.',
+    )
 
     # --- pdf ---
     pdf_parser = subparsers.add_parser(
@@ -142,12 +149,16 @@ def main():
             if not os.path.isfile(path):
                 logger.error("'%s' does not exist.", path)
                 sys.exit(1)
+        if args.ttf_dir and not os.path.isdir(args.ttf_dir):
+            logger.error("'%s' is not a directory.", args.ttf_dir)
+            sys.exit(1)
         create_doc(
             args.input_human_file,
             args.input_computer_file,
             args.output_file,
             args.font_name,
             author=args.author,
+            ttf_dir=args.ttf_dir,
         )
 
     elif args.command == 'pdf':

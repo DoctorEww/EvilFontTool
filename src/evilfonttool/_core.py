@@ -1,7 +1,13 @@
+import codecs
 import copy
 import logging
+import os
 import pathlib
+import re
 import string
+import uuid
+import zipfile
+from xml.sax.saxutils import escape as _xml_escape
 
 from fontTools.ttLib import TTFont
 from docx import Document
@@ -30,6 +36,30 @@ WIDTH = 0
 
 # Path to the bundled HTML template.
 _TEMPLATE = pathlib.Path(__file__).parent / "data" / "template.html"
+
+
+def _read_lines(path):
+    """Read a user-supplied text file and split it into lines.
+
+    A bare open(path) decodes with the platform-default encoding, which on
+    Windows is not UTF-8 or UTF-16 -- and PowerShell's `>` / `echo` / `Out-File`
+    (plus Notepad's "Unicode" option) write UTF-16 with a BOM. Reading that
+    with the platform default doesn't raise; it silently produces a string
+    full of embedded NUL bytes, which only surfaces later as a confusing lxml
+    error. Sniff the BOM (if any) and decode accordingly instead.
+    """
+    with open(path, "rb") as handle:
+        raw = handle.read()
+    for bom, encoding in (
+        (codecs.BOM_UTF8, "utf-8"),
+        (codecs.BOM_UTF16_LE, "utf-16-le"),
+        (codecs.BOM_UTF16_BE, "utf-16-be"),
+    ):
+        if raw.startswith(bom):
+            # utf-16-le/-be don't strip their own BOM on decode (unlike
+            # utf-8-sig for utf-8); slice it off ourselves in all three cases.
+            return raw[len(bom):].decode(encoding).splitlines()
+    return raw.decode("utf-8").splitlines()
 
 
 # ---------------------------------------------------------------------------
@@ -233,69 +263,190 @@ def createhtml(input_human_file, input_computer_file, output_file):
     total_hidden = 0
     line_number = 0
 
-    with open(input_human_file, "r") as human_file, \
-         open(input_computer_file, "r") as computer_file:
+    for human_line, computer_line in zip(
+        _read_lines(input_human_file),
+        _read_lines(input_computer_file),
+    ):
+        h_len = len(human_line)
+        c_len = len(computer_line)
 
-        for human_line, computer_line in zip(
-            (l.rstrip('\n') for l in human_file),
-            (l.rstrip('\n') for l in computer_file),
-        ):
-            h_len = len(human_line)
-            c_len = len(computer_line)
+        line_number += 1
+        logger.debug(f"Human   ({h_len} chars): {human_line}")
+        logger.debug(f"Computer({c_len} chars): {computer_line}")
 
-            line_number += 1
-            logger.debug(f"Human   ({h_len} chars): {human_line}")
-            logger.debug(f"Computer({c_len} chars): {computer_line}")
+        if c_len < h_len:
+            logger.warning(f"  Skipping line {line_number}: computer line must be >= human line length.")
+            continue
 
-            if c_len < h_len:
-                logger.warning(f"  Skipping line {line_number}: computer line must be >= human line length.")
-                continue
+        # Extra computer characters are inserted at the midpoint of the human text
+        diff = c_len - h_len
+        mid = h_len // 2
 
-            # Extra computer characters are inserted at the midpoint of the human text
-            diff = c_len - h_len
-            mid = h_len // 2
+        logger.debug(f"  diff={diff}, hidden chars inserted at mid={mid}")
 
-            logger.debug(f"  diff={diff}, hidden chars inserted at mid={mid}")
+        line_spans = []
+        h_index = 0
 
-            line_spans = []
-            h_index = 0
+        for i, computer_char in enumerate(computer_line):
+            if mid <= i < mid + diff:
+                # Hidden character — rendered invisibly using the stealth font
+                line_spans.append(
+                    f"<span style=\"font-family: '0';\">{computer_char}</span>"
+                )
+            else:
+                # Visible character — disguised as the corresponding human character
+                human_char = human_line[h_index]
+                letter_hex = human_char.encode().hex()
+                line_spans.append(
+                    f"<span style=\"font-family: '{letter_hex}';\">{computer_char}</span>"
+                )
+                h_index += 1
 
-            for i, computer_char in enumerate(computer_line):
-                if mid <= i < mid + diff:
-                    # Hidden character — rendered invisibly using the stealth font
-                    line_spans.append(
-                        f"<span style=\"font-family: '0';\">{computer_char}</span>"
-                    )
-                else:
-                    # Visible character — disguised as the corresponding human character
-                    human_char = human_line[h_index]
-                    letter_hex = human_char.encode().hex()
-                    line_spans.append(
-                        f"<span style=\"font-family: '{letter_hex}';\">{computer_char}</span>"
-                    )
-                    h_index += 1
-
-            spans.append("".join(line_spans))
-            lines_processed += 1
-            total_hidden += diff
+        spans.append("".join(line_spans))
+        lines_processed += 1
+        total_hidden += diff
 
     _write_html(output_file, "\n<br>\n".join(spans))
     logger.debug(f"[DONE] HTML written -> {output_file} ({lines_processed} lines, {total_hidden} hidden chars)")
 
 
 # ---------------------------------------------------------------------------
+# DOCX font embedding
+# ---------------------------------------------------------------------------
+
+# OOXML content type for an obfuscated embedded font part (ECMA-376 Part 1, 17.9).
+_FONTDATA_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.obfuscatedFont"
+
+
+def _obfuscate_font_bytes(data, guid_bytes):
+    """XOR the first 32 bytes of TTF `data` with `guid_bytes`, taken in reverse.
+
+    This is the OOXML font-embedding obfuscation algorithm (ECMA-376 Part 1,
+    17.9.2). Word reverses it with the identical XOR -- using the GUID stored
+    as the embedded part's fontKey -- before treating the bytes as a normal
+    TTF; XOR being its own inverse is exactly why one function does both
+    directions.
+    """
+    data = bytearray(data)
+    for i in range(min(32, len(data))):
+        data[i] ^= guid_bytes[15 - (i % 16)]
+    return bytes(data)
+
+
+def _next_rel_id(rels_xml):
+    """Return an rIdN not already used in a .rels part's raw XML text."""
+    used = {int(n) for n in re.findall(r'Id="rId(\d+)"', rels_xml)}
+    n = 1
+    while n in used:
+        n += 1
+    return f"rId{n}"
+
+
+def _embed_fonts(docx_path, ttf_dir, font_names):
+    """Embed the given Evil Font TTFs directly into a saved .docx, in place.
+
+    `font_names` are the exact font family names used in the document's runs
+    (e.g. 'MyFont 68', 'MyFont 0'); each one's TTF is found in `ttf_dir` by the
+    hex/'0' suffix after the last space -- the same naming createfonts() and
+    createstealthfont() use. This builds the OOXML font-embedding parts
+    (fontTable.xml entries, obfuscated font data, relationships, content
+    types) directly, rather than relying on Word's -- or LibreOffice's, which
+    doesn't work for Evil Fonts -- own "embed fonts" save option.
+
+    python-docx's default template always ships a word/fontTable.xml (listing
+    the built-in style fonts) and a document.xml.rels entry for it already, so
+    only new <w:font> entries need appending; nothing else needs to reference
+    fontTable.xml for the first time.
+    """
+    with zipfile.ZipFile(docx_path, "r") as zin:
+        parts = {name: zin.read(name) for name in zin.namelist()}
+
+    fonttable_xml = parts["word/fontTable.xml"].decode("utf-8")
+    fonttable_rels_xml = parts.get(
+        "word/_rels/fontTable.xml.rels",
+        b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        b'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>',
+    ).decode("utf-8")
+    content_types_xml = parts["[Content_Types].xml"].decode("utf-8")
+
+    new_fonts, new_rels, new_overrides = [], [], []
+    idx = 0
+    for font_name in sorted(font_names):
+        suffix = font_name.rsplit(" ", 1)[-1]
+        ttf_path = os.path.join(ttf_dir, f"{suffix}.ttf")
+        if not os.path.isfile(ttf_path):
+            logger.warning("embed: no TTF for font '%s' at %s -- skipping.", font_name, ttf_path)
+            continue
+
+        idx += 1
+        part_name = f"fonts/font{idx}.fntdata"
+        rid = _next_rel_id(fonttable_rels_xml + "".join(new_rels))
+
+        guid = uuid.uuid4()
+        with open(ttf_path, "rb") as handle:
+            raw = handle.read()
+        parts[f"word/{part_name}"] = _obfuscate_font_bytes(raw, guid.bytes)
+
+        new_fonts.append(
+            f'<w:font w:name="{_xml_escape(font_name)}">'
+            f'<w:embedRegular r:id="{rid}" w:fontKey="{{{str(guid).upper()}}}" w:subsetted="false"/>'
+            f'</w:font>'
+        )
+        new_rels.append(
+            f'<Relationship Id="{rid}" '
+            'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/font" '
+            f'Target="{part_name}"/>'
+        )
+        new_overrides.append(
+            f'<Override PartName="/word/{part_name}" ContentType="{_FONTDATA_CONTENT_TYPE}"/>'
+        )
+
+    if not new_fonts:
+        logger.warning("embed: no fonts embedded (none of the used fonts had a matching TTF).")
+        return
+
+    parts["word/fontTable.xml"] = fonttable_xml.replace(
+        "</w:fonts>", "".join(new_fonts) + "</w:fonts>").encode("utf-8")
+    parts["word/_rels/fontTable.xml.rels"] = fonttable_rels_xml.replace(
+        "</Relationships>", "".join(new_rels) + "</Relationships>").encode("utf-8")
+    parts["[Content_Types].xml"] = content_types_xml.replace(
+        "</Types>", "".join(new_overrides) + "</Types>").encode("utf-8")
+
+    settings_xml = parts["word/settings.xml"].decode("utf-8")
+    if "<w:embedTrueTypeFonts" not in settings_xml:
+        if "<w:proofState" in settings_xml:
+            settings_xml = settings_xml.replace(
+                "<w:proofState", "<w:embedTrueTypeFonts/><w:proofState", 1)
+        else:
+            insert_at = settings_xml.index(">", settings_xml.index("<w:settings")) + 1
+            settings_xml = (settings_xml[:insert_at] + "<w:embedTrueTypeFonts/>"
+                            + settings_xml[insert_at:])
+        parts["word/settings.xml"] = settings_xml.encode("utf-8")
+
+    with zipfile.ZipFile(docx_path, "w", zipfile.ZIP_DEFLATED) as zout:
+        for name, data in parts.items():
+            zout.writestr(name, data)
+
+    logger.debug(f"[DONE] Embedded {idx} font(s) into {docx_path}")
+
+
+# ---------------------------------------------------------------------------
 # DOCX output
 # ---------------------------------------------------------------------------
 
-def create_doc(input_human_file, input_computer_file, output_file, font_name_in, author="anonymous"):
+def create_doc(input_human_file, input_computer_file, output_file, font_name_in,
+               author="anonymous", ttf_dir=None):
     """Build a steganographic DOCX file from human and computer text files.
 
     Works identically to createhtml() but outputs a Word document. Each run is
     assigned an Evil Font by setting all four font slots (ascii, hAnsi, eastAsia,
     cs) to prevent Word from falling back to a system font.
 
-    The TTF variants of the Evil Fonts must be installed on the system (or
-    embedded in the document) for the deception to render correctly in Word.
+    If `ttf_dir` is given (the `ttffonts` directory from the `create` step), the
+    Evil Font TTFs actually used are embedded directly into the saved .docx, so
+    the deception renders correctly even where the fonts aren't installed.
+    Otherwise the TTF variants must be installed on the system for the
+    deception to render correctly in Word.
 
     Lines where the computer text is shorter than the human text are skipped.
     """
@@ -308,62 +459,65 @@ def create_doc(input_human_file, input_computer_file, output_file, font_name_in,
     lines_processed = 0
     total_hidden = 0
     line_number = 0
+    used_font_names = set()
 
-    with open(input_human_file, "r") as human_file, \
-         open(input_computer_file, "r") as computer_file:
+    for human_line, computer_line in zip(
+        _read_lines(input_human_file),
+        _read_lines(input_computer_file),
+    ):
+        h_len = len(human_line)
+        c_len = len(computer_line)
 
-        for human_line, computer_line in zip(
-            (l.rstrip('\n') for l in human_file),
-            (l.rstrip('\n') for l in computer_file),
-        ):
-            h_len = len(human_line)
-            c_len = len(computer_line)
+        line_number += 1
+        logger.debug(f"Human   ({h_len} chars): {human_line}")
+        logger.debug(f"Computer({c_len} chars): {computer_line}")
 
-            line_number += 1
-            logger.debug(f"Human   ({h_len} chars): {human_line}")
-            logger.debug(f"Computer({c_len} chars): {computer_line}")
+        if c_len < h_len:
+            logger.warning(f"  Skipping line {line_number}: computer line must be >= human line length.")
+            continue
 
-            if c_len < h_len:
-                logger.warning(f"  Skipping line {line_number}: computer line must be >= human line length.")
-                continue
+        diff = c_len - h_len
+        mid = h_len // 2
 
-            diff = c_len - h_len
-            mid = h_len // 2
+        logger.debug(f"  diff={diff}, hidden chars inserted at mid={mid}")
 
-            logger.debug(f"  diff={diff}, hidden chars inserted at mid={mid}")
+        p = doc.add_paragraph()
+        h_index = 0
 
-            p = doc.add_paragraph()
-            h_index = 0
+        for i, computer_char in enumerate(computer_line):
+            if mid <= i < mid + diff:
+                # Hidden character — use the stealth (zero-width) font
+                font_name = f'{font_name_in} 0'
+            else:
+                # Visible character — disguised as the corresponding human character
+                human_char = human_line[h_index]
+                font_name = f'{font_name_in} {human_char.encode().hex()}'
+                h_index += 1
 
-            for i, computer_char in enumerate(computer_line):
-                if mid <= i < mid + diff:
-                    # Hidden character — use the stealth (zero-width) font
-                    font_name = f'{font_name_in} 0'
-                else:
-                    # Visible character — disguised as the corresponding human character
-                    human_char = human_line[h_index]
-                    font_name = f'{font_name_in} {human_char.encode().hex()}'
-                    h_index += 1
+            # Add a run and explicitly set all four font slots.
+            # Word will fall back to a system font if any slot is unset,
+            # which would break the illusion.
+            run = p.add_run(computer_char)
+            run.font.name = font_name
+            rFonts = run._element.rPr.rFonts
+            rFonts.set(qn("w:ascii"),   font_name)
+            rFonts.set(qn("w:hAnsi"),   font_name)
+            rFonts.set(qn("w:eastAsia"), font_name)
+            rFonts.set(qn("w:cs"),      font_name)
+            used_font_names.add(font_name)
 
-                # Add a run and explicitly set all four font slots.
-                # Word will fall back to a system font if any slot is unset,
-                # which would break the illusion.
-                run = p.add_run(computer_char)
-                run.font.name = font_name
-                rFonts = run._element.rPr.rFonts
-                rFonts.set(qn("w:ascii"),   font_name)
-                rFonts.set(qn("w:hAnsi"),   font_name)
-                rFonts.set(qn("w:eastAsia"), font_name)
-                rFonts.set(qn("w:cs"),      font_name)
-
-            lines_processed += 1
-            total_hidden += diff
+        lines_processed += 1
+        total_hidden += diff
 
     doc.core_properties.comments = ""
     if author is not None:
         doc.core_properties.author = author
 
     doc.save(output_file)
+
+    if ttf_dir:
+        _embed_fonts(output_file, ttf_dir, used_font_names)
+
     logger.debug(f"[DONE] DOCX written -> {output_file} ({lines_processed} lines, {total_hidden} hidden chars)")
 
 # ---------------------------------------------------------------------------
@@ -396,6 +550,7 @@ from reportlab.lib.utils import ImageReader as _ImageReader
 from reportlab.pdfbase import pdfmetrics as _pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont as _RLTTFont
 from pdf2image import convert_from_path as _convert_from_path
+from pdf2image.exceptions import PDFInfoNotInstalledError as _PDFInfoNotInstalledError
 from pdfminer.high_level import extract_pages as _extract_pages
 from pdfminer.layout import LTChar as _LTChar
 
@@ -524,6 +679,11 @@ def _render_docx_to_pdf(docx_path, ttf_dir, workdir, soffice):
     fontconfig at it via a throwaway config instead of installing the fonts
     system-wide.
     """
+    # Resolve to absolute before any cwd changes (below, for the soffice
+    # subprocess) so a relative path the caller passed still resolves against
+    # the original working directory, not soffice's.
+    docx_path = os.path.abspath(docx_path)
+
     env = dict(os.environ)
     if ttf_dir:
         # Build a temporary fontconfig that adds ttf_dir on top of the system
@@ -542,21 +702,64 @@ def _render_docx_to_pdf(docx_path, ttf_dir, workdir, soffice):
                 "</fontconfig>\n"
             )
         env["FONTCONFIG_FILE"] = conf
-        subprocess.run(["fc-cache", "-f"], env=env,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            subprocess.run(["fc-cache", "-f"], env=env,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except FileNotFoundError:
+            # fc-cache (fontconfig) isn't available on Windows; --ttf-dir is
+            # exposed to LibreOffice via FONTCONFIG_FILE regardless, but without
+            # fc-cache to prime it, a stale/missing cache may make LibreOffice
+            # miss the fonts on the first run.
+            logger.warning(
+                "'fc-cache' not found -- skipping font cache refresh. If the "
+                "disguise doesn't render, try running the command again."
+            )
     # A private user profile avoids clashing with any LibreOffice already running.
-    profile = "file://" + os.path.join(workdir, "loprofile")
-    subprocess.run(
-        [soffice, "--headless", "--convert-to", "pdf", "--outdir", workdir,
-         docx_path, f"-env:UserInstallation={profile}"],
-        env=env, check=True,
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
+    # Building the URI by hand (e.g. "file://" + a Windows path) produces a
+    # malformed "file://C:\..." URI -- backslashes instead of "/", and no
+    # leading slash before the drive letter -- which LibreOffice on Windows
+    # can't resolve, manifesting as a "bootstrap.ini is corrupt" popup.
+    # Path.as_uri() builds a correct file:// URI on every platform.
+    profile = pathlib.Path(workdir, "loprofile").resolve().as_uri()
+    # On Windows, soffice.exe resolves bootstrap.ini relative to its own
+    # working directory -- double-clicking it in Explorer sets that
+    # automatically, but a subprocess otherwise inherits our cwd instead,
+    # which soffice.exe misreads as a corrupt config. Run it from its own
+    # directory to match how Explorer launches it.
+    soffice_dir = os.path.dirname(soffice) or None
+    try:
+        result = subprocess.run(
+            [soffice, "--headless", "--convert-to", "pdf", "--outdir", workdir,
+             docx_path, f"-env:UserInstallation={profile}"],
+            env=env, cwd=soffice_dir,
+            capture_output=True, text=True,
+        )
+    except FileNotFoundError:
+        raise RuntimeError(
+            f"Could not find the LibreOffice binary '{soffice}'. On Windows, "
+            "it's usually not on PATH even after installing -- pass --soffice "
+            "with the full path, e.g. "
+            "--soffice \"C:\\Program Files\\LibreOffice\\program\\soffice.exe\"."
+        ) from None
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()
+        raise RuntimeError(
+            f"LibreOffice failed to convert '{docx_path}' to PDF "
+            f"(exit code {result.returncode})."
+            + (f"\n{detail}" if detail else " No further output was captured.")
+        )
     # LibreOffice names the output after the input stem, in --outdir.
     out = os.path.join(
         workdir, os.path.splitext(os.path.basename(docx_path))[0] + ".pdf")
     if not os.path.exists(out):
-        raise RuntimeError("LibreOffice produced no PDF (is 'soffice' installed?)")
+        # soffice can exit 0 even when it fails (e.g. "source file could not
+        # be loaded" for a missing/corrupt input) rather than a nonzero code,
+        # so surface whatever it printed here too.
+        detail = (result.stderr or result.stdout or "").strip()
+        raise RuntimeError(
+            f"LibreOffice produced no PDF for '{docx_path}'."
+            + (f"\n{detail}" if detail else " No further output was captured.")
+        )
     return out
 
 
@@ -711,7 +914,13 @@ def _resolve_ink_font(ink_font):
                 return found
         except FileNotFoundError:
             break
-    raise RuntimeError("No system font found for the copy layer; pass ink_font.")
+    raise RuntimeError(
+        "Could not auto-detect a system font for the invisible copy layer "
+        "(this uses 'fc-match', which isn't available on Windows and may be "
+        "missing elsewhere too). Pass --ink-font pointing at any TTF on your "
+        "system, e.g. --ink-font \"C:\\Windows\\Fonts\\times.ttf\" on Windows, "
+        "or --ink-font /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf on Linux."
+    )
 
 
 def create_pdf(input_docx, output_pdf, ttf_dir=None,
@@ -740,7 +949,17 @@ def create_pdf(input_docx, output_pdf, ttf_dir=None,
     with tempfile.TemporaryDirectory() as workdir:
         look_pdf = _render_docx_to_pdf(input_docx, ttf_dir, workdir, soffice)
         pages = _visible_lines(look_pdf)
-        images = _convert_from_path(look_pdf, dpi=dpi)
+        try:
+            images = _convert_from_path(look_pdf, dpi=dpi)
+        except _PDFInfoNotInstalledError:
+            raise RuntimeError(
+                "Could not find poppler's 'pdfinfo'/'pdftoppm' (used by pdf2image "
+                "to rasterise the page). On Windows, install poppler and add its "
+                "'Library\\bin' folder to PATH -- see "
+                "https://github.com/oschwartz10612/poppler-windows -- then open a "
+                "new terminal so PATH changes take effect. On Linux/macOS, install "
+                "the 'poppler-utils' package."
+            ) from None
 
     # 3. Classify every rendered line as header / body / footer by its y-position
     #    against the margins. Headers/footers sit in the margin bands; everything
