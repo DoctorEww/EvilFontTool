@@ -4,10 +4,13 @@
 
 EvilFontTool hides machine-readable text inside a document that displays completely different text to a human reader. It does this using **Evil Fonts** — fonts that intentionally deceive the viewer by rendering a different letter than understood by a computer. By remapping font glyphs, the document's visible characters show humans one thing while terminals, AI systems, and clipboard copy paste see another.
 
-## Evil Font Demo !!DON'T MISS THIS!!
+## Evil Font Demos/Labs !!DON'T MISS THIS!!
 
-**[View the Demos → Here](https://doctoreww.github.io/EvilFontTool/)** 
-**[View the Evil Font Labs → Here](/labs/README.MD)**
+- **[View the Demos → Here](https://doctoreww.github.io/EvilFontTool/)** 
+
+- **[View the Evil Font Labs → Here](/labs/README.MD)**
+
+> The word docx demos do **NOT** work on mobile due to the way mobile phones render fonts.
 
 ---
 
