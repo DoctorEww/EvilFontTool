@@ -6,8 +6,7 @@ EvilFontTool hides machine-readable text inside a document that displays complet
 
 ## Evil Font Demo !!DON'T MISS THIS!!
 
-**[View the Demo → Here](https://doctoreww.github.io/EvilFontTool/)** *(hosted on GitHub Pages)*
-
+**[View the Demos → Here](https://doctoreww.github.io/EvilFontTool/)** 
 **[View the Evil Font Labs → Here](/labs/README.MD)**
 
 ---
