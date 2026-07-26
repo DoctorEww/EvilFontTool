@@ -50,14 +50,14 @@ Here are a few labs to explore the different concepts of Evil Fonts. They range 
 
 ## Lab 3: Flags for Sale (PDF or DOCX)
 
-**Starting Point:** [Here](https://doctoreww.github.io/EvilFontTool/labs/flags-for-sale.html)
+**Starting Point:** [Flags for Sale](https://doctoreww.github.io/EvilFontTool/labs/flags-for-sale.html)
 
 ```mermaid
 flowchart LR
     Doc[Uploaded Document] --> Sec["Security AI (reads extracted text only)"]
     Sec -- "User requests flag -> blocked" --> Blocked[Rejected. Human AI never sees it]
     Sec -- Approves --> Human["Human AI (reads via OCR, like a person would)"]
-    Human --> HumanView[responds to the human-readable text]
+    Human --> HumanView[Responds to the human-readable text]
 ```
 
 **Background:** Every upload is reviewed by a Security AI first, which only reads the document's extracted text. If the security AI decides the content is asking for the flag, it blocks the response. If the security AI does not detect that the content is asking for the flag, it is sent to the human AI. The human AI then reviews the document via OCR, the same way a person would look at it. The human AI then responds.
@@ -78,14 +78,14 @@ flowchart LR
 
 **Goal:** Take what you've learned so far and design a creative HTML, PDF, or DOCX (or any other portable file type) that uses Evil Fonts in a compelling way; a disguised login page, a fake invoice, a hidden message in a report, anything you can think of. The best submissions will be added to the [demo website](https://doctoreww.github.io/EvilFontTool/), with attribution if desired. More details found at the submission link.
 
-**Submission Link:** [Here](https://github.com/DoctorEww/EvilFontTool/issues/3)
+**Submission Link:** [Evil Font Design](https://github.com/DoctorEww/EvilFontTool/issues/3)
 
 
 ## Lab 5: Creative Evil Font Usage
 
 **Goal:** Find a new, creative use case for Evil Fonts beyond what's covered in the labs/demos above, and write it up. More details found at the submission link.
 
-**Submission Link:** [Here](https://github.com/DoctorEww/EvilFontTool/issues/4)
+**Submission Link:** [Creative Evil Font Usage](https://github.com/DoctorEww/EvilFontTool/issues/4)
 
 
 ## Continue the journey...
