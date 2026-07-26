@@ -8,6 +8,8 @@ EvilFontTool hides machine-readable text inside a document that displays complet
 
 **[View the Demo → Here](https://doctoreww.github.io/EvilFontTool/)** *(hosted on GitHub Pages)*
 
+**[View the Evil Font Labs → Here](/labs/README.MD)**
+
 ---
 
 ## Table of Contents
@@ -82,7 +84,7 @@ If you want a genuine Evil Font PDF, you need to build the Word doc without invi
 
 TLDR;
 * Option 1: (easy one) Use the pdf command → two-layer PDF, same mechanism as other tools (more well-known/detectable).
-* Option 2: (real evil font one) Build a Word doc without invisible fonts, then convert via Print to PDF → more annoying, but produces different IOCs than Option 1.
+* Option 2: (real Evil Font one) Build a Word doc without invisible fonts, then convert via Print to PDF → more annoying, but produces different IOCs than Option 1.
 
 
 > If anyone figures out how to pull off Option 2 *with* invisible letters, I owe you a drink. Open an issue and I'll credit you in the README.
@@ -122,7 +124,7 @@ Outputs:
 - Lines are matched positionally (line 1 to line 1, etc.)
 
 ---
-### `web` — Generate an evil font HTML file
+### `web` — Generate an Evil Font HTML file
 
 ```bash
 evilfonttool web <human_file> <computer_file> <output_file>
@@ -143,7 +145,7 @@ evilfonttool web human.txt computer.txt output/index.html
 
 ---
 
-### `doc` — Generate a evil font DOCX file
+### `doc` — Generate a Evil Font DOCX file
 
 ```bash
 evilfonttool doc <human_file> <computer_file> <output_file> <font_name> [--author AUTHOR] [--ttf-dir DIR]
