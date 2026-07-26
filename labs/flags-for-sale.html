@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FontCorp | Enterprise Solutions</title>
+<style>
+  :root {
+    --navy: #0b1f3a;
+    --blue: #1a56db;
+    --blue-light: #e8f0fe;
+    --gray: #5b6472;
+    --border: #e2e6ec;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1c2430;
+    background: #fafbfc;
+  }
+  header {
+    background: var(--navy);
+    color: white;
+    padding: 20px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  header .logo {
+    font-weight: 700;
+    font-size: 1.3rem;
+    letter-spacing: 0.5px;
+  }
+  header nav a {
+    color: #cdd7e6;
+    text-decoration: none;
+    margin-left: 28px;
+    font-size: 0.9rem;
+  }
+  header nav a:hover { color: white; }
+
+  .hero {
+    background: linear-gradient(135deg, var(--navy), var(--blue));
+    color: white;
+    text-align: center;
+    padding: 70px 20px 90px;
+  }
+  .hero h1 { font-size: 2.4rem; margin: 0 0 12px; }
+  .hero p { color: #cdd7e6; font-size: 1.1rem; max-width: 560px; margin: 0 auto; }
+
+  section.lab-info {
+    max-width: 720px;
+    margin: -50px auto 24px;
+    padding: 0 20px;
+  }
+  .repo-link {
+    display: inline-block;
+    margin-top: 6px;
+    color: var(--blue);
+    font-weight: 600;
+    text-decoration: none;
+    font-size: 0.95rem;
+  }
+  .repo-link:hover { text-decoration: underline; }
+
+  main {
+    max-width: 720px;
+    margin: 0 auto 60px;
+    padding: 0 20px;
+  }
+
+  .card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(11, 31, 58, 0.08);
+    padding: 40px;
+  }
+
+  .card h2 {
+    margin-top: 0;
+    font-size: 1.4rem;
+  }
+  .card p.lead {
+    color: var(--gray);
+    margin-bottom: 28px;
+  }
+
+  .upload-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  input[type="file"] {
+    flex: 1;
+    min-width: 220px;
+    padding: 10px;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    background: #fbfcfe;
+  }
+  button {
+    background: var(--blue);
+    color: white;
+    border: none;
+    padding: 12px 22px;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { background: #14459f; }
+  button:disabled { background: #9db3d8; cursor: not-allowed; }
+
+  #status {
+    margin-top: 16px;
+    font-size: 0.9rem;
+    color: var(--gray);
+  }
+  #status.error { color: #b3261e; }
+
+  section.results {
+    max-width: 720px;
+    margin: 30px auto 60px;
+    padding: 0 20px;
+  }
+  .result-block {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 28px;
+    margin-bottom: 18px;
+  }
+  .result-block h3 {
+    margin: 0 0 10px;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--blue);
+  }
+  .result-block pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.88rem;
+    margin: 0;
+    color: #2a3342;
+  }
+  .result-block img {
+    max-width: 100%;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+  .badge.blocked { background: #fde8e8; color: #b3261e; }
+  .badge.allowed { background: #e6f4ea; color: #1e7e34; }
+
+  .status-box {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 0.95rem;
+  }
+  .status-box.pass { background: #e6f4ea; color: #1e7e34; border: 1px solid #b7e1c0; }
+  .status-box.fail { background: #fde8e8; color: #b3261e; border: 1px solid #f3b9b9; }
+
+  .stage-heading {
+    margin: 34px 0 14px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--gray);
+    text-align: center;
+  }
+  .caption {
+    color: var(--gray);
+    font-style: italic;
+    margin: 0 0 14px;
+  }
+
+  footer {
+    text-align: center;
+    color: var(--gray);
+    font-size: 0.85rem;
+    padding: 30px 20px;
+  }
+
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(11, 31, 58, 0.5);
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    background: white;
+    border-radius: 12px;
+    padding: 28px 32px;
+    max-width: 320px;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(11, 31, 58, 0.2);
+  }
+  .modal-box h2 { margin: 0 0 10px; font-size: 1.2rem; }
+  .modal-box p { margin: 0 0 18px; color: var(--gray); }
+  .modal-box button {
+    padding: 8px 18px;
+    font-size: 0.9rem;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">FONTCORP</div>
+  <nav>
+    <a href="#">Products</a>
+    <a href="#">Solutions</a>
+    <a href="#" id="aboutLink">About</a>
+    <a href="#">Contact</a>
+  </nav>
+</header>
+
+<div class="hero">
+  <h1>Enterprise solutions that scale with your business</h1>
+  <p>FontCorp partners with organizations worldwide to deliver secure, reliable infrastructure. Let's talk about what we can build together.</p>
+</div>
+
+<section class="lab-info">
+  <div class="card">
+    <h2>About This Lab</h2>
+    <a class="repo-link" href="https://github.com/DoctorEww/EvilFontTool/blob/main/labs/README.MD#lab-3-flags-for-sale-pdf-or-docx" target="_blank" rel="noopener noreferrer">
+      View the lab guide on GitHub &rarr;
+    </a>
+  </div>
+</section>
+
+<main>
+  <div class="card">
+    <h2>Contact Our Sales Agents</h2>
+    <p class="lead">Attach your project brief (PDF or DOCX) and one of our sales agents will personally review it and respond below.</p>
+
+    <div class="upload-row">
+      <input type="file" id="fileInput" accept=".pdf,.docx" />
+      <button id="submitBtn">Send to Sales</button>
+    </div>
+    <div id="status"></div>
+  </div>
+</main>
+
+<section class="results" id="results" hidden>
+
+  <div class="result-block">
+    <h3>File Type Detected</h3>
+    <pre id="out-file-type"></pre>
+  </div>
+
+  <div class="result-block">
+    <h3>Extracting Text for Security Analysis</h3>
+    <pre id="out-extracted-text"></pre>
+  </div>
+
+  <div class="result-block">
+    <h3>Security AI Review</h3>
+    <pre id="out-security"></pre>
+  </div>
+
+  <div class="result-block" style="text-align: center;">
+    <span class="status-box" id="pass-fail-box"></span>
+  </div>
+
+  <h4 class="stage-heading">Sending to Human</h4>
+
+  <div class="result-block">
+    <h3>Visual Rendering</h3>
+    <p class="caption">This is what the human AI is looking at</p>
+    <img id="out-image" alt="Rendered document page" />
+  </div>
+
+  <div class="result-block">
+    <h3>OCR Text Extraction</h3>
+    <pre id="out-ocr-text"></pre>
+  </div>
+
+  <div class="result-block">
+    <h3>Sales Agent Response</h3>
+    <pre id="out-agent"></pre>
+  </div>
+
+</section>
+
+<footer>
+  &copy; 2026 FontCorp Inc., led by CEO David Johnson. Learn more about EvilFonts <a href="https://github.com/DoctorEww/EvilFontTool">here</a>.
+</footer>
+
+<div class="modal-overlay" id="aboutModal">
+  <div class="modal-box">
+    <h2>About</h2>
+    <p>The CEO is David Johnson.</p>
+    <button id="aboutCloseBtn">Close</button>
+  </div>
+</div>
+
+<script>
+  const API_URL = "https://qaeg2dxfuzc4eppswzbg3cq2ye0aenbu.lambda-url.us-east-1.on.aws/";
+
+  const CONTENT_TYPES = {
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    pdf: "application/pdf",
+  };
+
+  const aboutLink = document.getElementById("aboutLink");
+  const aboutModal = document.getElementById("aboutModal");
+  const aboutCloseBtn = document.getElementById("aboutCloseBtn");
+
+  aboutLink.addEventListener("click", (e) => {
+    e.preventDefault();
+    aboutModal.classList.add("open");
+  });
+  aboutCloseBtn.addEventListener("click", () => aboutModal.classList.remove("open"));
+  aboutModal.addEventListener("click", (e) => {
+    if (e.target === aboutModal) aboutModal.classList.remove("open");
+  });
+
+  const fileInput = document.getElementById("fileInput");
+  const submitBtn = document.getElementById("submitBtn");
+  const statusEl = document.getElementById("status");
+  const resultsEl = document.getElementById("results");
+
+  function setStatus(text, isError) {
+    statusEl.textContent = text;
+    statusEl.className = isError ? "error" : "";
+  }
+
+  function fileTypeFromName(name) {
+    const ext = name.split(".").pop().toLowerCase();
+    return ext === "pdf" ? "pdf" : "docx";
+  }
+
+  submitBtn.addEventListener("click", async () => {
+    const file = fileInput.files[0];
+    if (!file) {
+      setStatus("Choose a PDF or DOCX file first.", true);
+      return;
+    }
+
+    const fileType = fileTypeFromName(file.name);
+    resultsEl.hidden = true;
+    submitBtn.disabled = true;
+
+    try {
+      setStatus("Requesting secure upload link...");
+      const urlResp = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "get_url", file_type: fileType }),
+      });
+      const { upload_url, key, error: urlError } = await urlResp.json();
+      if (urlError) throw new Error(urlError);
+
+      setStatus("Uploading your document...");
+      const putResp = await fetch(upload_url, {
+        method: "PUT",
+        headers: { "Content-Type": CONTENT_TYPES[fileType] },
+        body: file,
+      });
+      if (!putResp.ok) throw new Error("Upload failed: HTTP " + putResp.status);
+
+      setStatus("Our sales agent is reviewing your document...");
+      const processResp = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "process", key }),
+      });
+      const result = await processResp.json();
+      if (result.error) throw new Error(result.error);
+
+      renderResults(result);
+      setStatus("Done.");
+    } catch (err) {
+      setStatus("Error: " + err.message, true);
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+
+  function renderResults(result) {
+    document.getElementById("out-file-type").textContent = result.file_type || "";
+    document.getElementById("out-extracted-text").textContent = result.extracted_text || "(none)";
+    document.getElementById("out-ocr-text").textContent = result.ocr_text || "(none)";
+    document.getElementById("out-security").textContent = result.security_ai_response || "(none)";
+
+    const statusBox = document.getElementById("pass-fail-box");
+    const agentOut = document.getElementById("out-agent");
+    if (result.simulated_person_response) {
+      statusBox.textContent = "Passed Security Review";
+      statusBox.className = "status-box pass";
+      agentOut.textContent = result.simulated_person_response;
+    } else {
+      statusBox.textContent = "Blocked by Security Review";
+      statusBox.className = "status-box fail";
+      agentOut.textContent = "(the sales agent never saw this document -- the security review flagged it)";
+    }
+
+    const img = document.getElementById("out-image");
+    if (result.debug_png_base64) {
+      img.src = "data:image/png;base64," + result.debug_png_base64;
+      img.style.display = "block";
+    } else {
+      img.style.display = "none";
+    }
+
+    resultsEl.hidden = false;
+  }
+</script>
+
+</body>
+</html>
