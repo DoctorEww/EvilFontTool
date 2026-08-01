@@ -42,7 +42,7 @@ Here are a few labs to explore the different concepts of Evil Fonts. They range 
 
 **Starting Point:** [new-laptop-setup-guide.docx](resources/new-laptop-setup-guide.docx)
 
-**Goal:** Disguise the commands in the new laptop setup guide so that `echo pwned` (or your favorite command) is copied instead. Then, turn it into a PDF. 
+**Goal:** Disguise the commands in the new laptop setup guide so that `echo this is where you would put your payload during a red team` (or your favorite command) is copied instead. Then, turn it into a PDF. 
 
 **Learning Objectives:**
 1) Learn how to take an existing DOCX (also designed by Claude) and add Evil Fonts to it.
