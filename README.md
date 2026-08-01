@@ -8,7 +8,7 @@ EvilFontTool hides machine-readable text inside a document that displays complet
 
 - **[View the Demos → Here](https://doctoreww.github.io/EvilFontTool/)** 
 
-- **[View the Evil Font Labs → Here](/labs/README.MD)**
+- **[View the Evil Font Labs → Here](/labs/README.md)**
 
 > The word docx demos do **NOT** work on mobile due to the way mobile phones render fonts.
 
@@ -52,14 +52,24 @@ Installed automatically via `pip`:
 - `Pillow` — image handling for the PDF pipeline
 
 System requirements (not installed by `pip` — must be on your `PATH`):
-- **[poppler-utils](https://poppler.freedesktop.org/)** — required by `pdf2image` to render PDF pages for the `pdf` command
-  - Ubuntu/Debian: `sudo apt install poppler-utils`
-  - macOS: `brew install poppler`
-  - Windows: [poppler for Windows](https://github.com/oschwartz10612/poppler-windows) (add the Library\bin folder to path)
 - **[LibreOffice](https://www.libreoffice.org/)** — required for the `pdf` command, which shells out to `soffice --headless` to convert DOCX to PDF
   - Ubuntu/Debian: `sudo apt install libreoffice`
   - macOS: `brew install --cask libreoffice`
   - Windows: [download installer](https://www.libreoffice.org/download/)
+- **[poppler-utils](https://poppler.freedesktop.org/)** — required by `pdf2image` to render PDF pages for the `pdf` command
+  - Ubuntu/Debian: `sudo apt install poppler-utils`
+  - macOS: `brew install poppler`
+  - Windows: [poppler for Windows](https://github.com/oschwartz10612/poppler-windows) (add the Library\bin folder to path) Or see below.
+
+### Poppler install windows helper script
+Install poppler into `~\Documents\poppler` and add to path.
+```powershell
+irm (irm https://api.github.com/repos/oschwartz10612/poppler-windows/releases/latest).assets[0].browser_download_url -OutFile ~\Documents\poppler.zip
+Expand-Archive ~\Documents\poppler.zip ~\Documents\poppler -Force
+$bin = (gci ~\Documents\poppler -Recurse -Filter pdftotext.exe)[0].DirectoryName
+[Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path','User') + ";$bin", 'User'); $env:Path += ";$bin"
+```
+
 
 ---
 ## Where can I find fonts to use?

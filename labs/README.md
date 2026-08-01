@@ -2,6 +2,8 @@
 
 Here are a few labs to explore the different concepts of Evil Fonts. They range from guided (a specific goal or flag to find) to open-ended (build something creative), and are meant to build hands-on intuition about how Evil Fonts can deceive humans, security tooling, and AI systems differently. Created for DEF CON 34 Red Team Village.
 
+> Stuck? Check the [walkthrough](walkthrough.md) for a step-by-step solution to Labs 1-3.
+
 
 >Like the labs? Leave a star!
 

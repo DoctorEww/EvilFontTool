@@ -5,15 +5,34 @@ import os
 import pathlib
 import re
 import string
+import subprocess
+import tempfile
 import uuid
 import zipfile
 from xml.sax.saxutils import escape as _xml_escape
 
-from fontTools.ttLib import TTFont
 from docx import Document
+from docx.document import Document as _DocxDocument
 from docx.oxml.ns import qn
+from docx.oxml.table import CT_Tbl
+from docx.oxml.text.paragraph import CT_P
+from docx.table import Table
+from docx.text.paragraph import Paragraph
+from fontTools.ttLib import TTFont
+from pdf2image import convert_from_path as _convert_from_path
+from pdf2image.exceptions import PDFInfoNotInstalledError as _PDFInfoNotInstalledError
+from pdfminer.high_level import extract_pages as _extract_pages
+from pdfminer.layout import LTChar as _LTChar
+from reportlab.lib.utils import ImageReader as _ImageReader
+from reportlab.pdfbase import pdfmetrics as _pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont as _RLTTFont
+from reportlab.pdfgen import canvas as _rl_canvas
 
 logger = logging.getLogger(__name__)
+
+_INK_FONT = "__ink__"
+_REGION_TOL = 2.0
+
 
 
 # ---------------------------------------------------------------------------
@@ -536,498 +555,1402 @@ def create_doc(input_human_file, input_computer_file, output_file, font_name_in,
 #   * LibreOffice ('soffice' on PATH) and poppler-utils
 #   * pip install reportlab pdf2image pdfminer.six Pillow
 
-import os
-import subprocess
-import tempfile
 
-from docx.document import Document as _DocxDocument
-from docx.oxml.table import CT_Tbl
-from docx.oxml.text.paragraph import CT_P
-from docx.table import Table
-from docx.text.paragraph import Paragraph
-from reportlab.pdfgen import canvas as _rl_canvas
-from reportlab.lib.utils import ImageReader as _ImageReader
-from reportlab.pdfbase import pdfmetrics as _pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont as _RLTTFont
-from pdf2image import convert_from_path as _convert_from_path
-from pdf2image.exceptions import PDFInfoNotInstalledError as _PDFInfoNotInstalledError
-from pdfminer.high_level import extract_pages as _extract_pages
-from pdfminer.layout import LTChar as _LTChar
 
-_INK_FONT = "__ink__"     # reportlab name for the invisible copy layer
-_REGION_TOL = 2.0             # pt tolerance for header/footer classification
 
+# ============================================================================
+# DOCX PARSING
+# ============================================================================
 
 def _iter_block_items(parent):
-    """Yield every paragraph in the document, in reading order.
-
-    docx `doc.paragraphs` skips text inside tables, so we walk the raw XML body
-    instead: paragraphs (CT_P) are yielded directly, and tables (CT_Tbl) are
-    descended into cell-by-cell (recursively, since cells can contain tables).
-    This keeps the payload order identical to how the page reads top-to-bottom,
-    which is what the copy layer relies on.
     """
-    # A document's runs live on `.element.body`; a table cell's on `._tc`.
-    elem = parent.element.body if isinstance(parent, _DocxDocument) else parent._tc
+    Yield every paragraph in the document in reading order.
+
+    Includes paragraphs inside tables, including nested tables.
+    """
+
+    elem = (
+        parent.element.body
+        if isinstance(parent, _DocxDocument)
+        else parent._tc
+    )
+
     for child in elem.iterchildren():
+
         if isinstance(child, CT_P):
+
             yield Paragraph(child, parent)
+
         elif isinstance(child, CT_Tbl):
+
             table = Table(child, parent)
+
             for row in table.rows:
+
                 for cell in row.cells:
+
                     yield from _iter_block_items(cell)
 
 
 def _run_font_name(run):
-    """Return the font family assigned to a run.
-
-    `run.font.name` covers the common case, but create_doc sets the four w:rFonts
-    slots directly (ascii/hAnsi/eastAsia/cs), so fall back to reading them off the
-    XML when the high-level property is empty. Without this fallback some runs
-    would look font-less and their stealth/visible status would be misjudged.
     """
+    Return the font family assigned to a run.
+    """
+
     name = run.font.name
+
     if name:
         return name
+
     rpr = run._element.rPr
+
     if rpr is not None:
-        rfonts = rpr.find(qn("w:rFonts"))
+
+        rfonts = rpr.find(
+            qn("w:rFonts")
+        )
+
         if rfonts is not None:
-            return rfonts.get(qn("w:ascii")) or rfonts.get(qn("w:hAnsi")) or ""
+
+            return (
+                rfonts.get(qn("w:ascii"))
+                or rfonts.get(qn("w:hAnsi"))
+                or ""
+            )
+
     return ""
 
 
 def _is_stealth_font(font_name):
-    """True if `font_name` is a stealth font.
-
-    createstealthfont always names the stealth font '<prefix> 0', while disguise
-    fonts always end in a hex code (>= 2 digits, e.g. '<prefix> 61'). So a name
-    ending in ' 0' is unambiguously the stealth font -- independent of the prefix,
-    which means it doesn't matter whether the font_name passed to create_pdf
-    exactly matches the one used to build the doc. Rendered PDFs may prepend a
-    subset tag like 'ABCDEF+', so strip that first.
     """
-    base = (font_name or "").split("+", 1)[-1]
-    return base.endswith(" 0")
+    Detect the stealth font.
+
+    Stealth fonts are named with a suffix of:
+
+        " 0"
+
+    Example:
+
+        EvilFont 0
+    """
+
+    base = (
+        font_name or ""
+    ).split(
+        "+",
+        1
+    )[-1]
+
+    return base.endswith(
+        " 0"
+    )
 
 
 def _is_decorative_glyph(char_text):
-    """True if `char_text` is a native list-bullet/symbol glyph, not payload content.
-
-    Word/LibreOffice draw list bullets (and other auto-numbering glyphs) straight
-    from the paragraph's numbering definition using a symbol font (e.g. Wingdings),
-    at render time -- that glyph never appears in any run's text, so the docx
-    parser has no way to know about it and it is absent from the payload entirely.
-    These glyphs are reliably encoded in the Unicode Private Use Area, which our
-    disguised payload characters (always plain ASCII) never use, so PUA codepoints
-    are a safe signal to exclude them from the visible glyph count.
     """
-    return len(char_text) == 1 and 0xE000 <= ord(char_text) <= 0xF8FF
+    Detect native decorative glyphs such as list bullets.
+    """
+
+    return (
+        len(char_text) == 1
+        and 0xE000 <= ord(char_text) <= 0xF8FF
+    )
 
 
 def _paragraph_payload(paragraphs):
-    """Flatten runs into the character stream we must reproduce on copy.
-
-    Returns (payload, visible):
-      * payload  -- every character in order as (char, is_hidden) tuples. This is
-                    the FULL computer text (disguised chars + stealth chars) and
-                    is exactly what a copy-paste of the PDF must yield.
-      * visible  -- just the non-hidden characters, joined. Its length must match
-                    the number of visible glyphs LibreOffice actually draws; that
-                    is how the copy layer keeps its place (see _assign_payload).
     """
-    payload, visible = [], []
+    Flatten paragraphs into:
+
+        payload:
+            [(character, hidden), ...]
+
+        visible:
+            all visible DOCX characters
+
+    Hidden Evil Font characters are preserved in payload but are not
+    added to visible because they should not consume a rendered PDF glyph.
+    """
+
+    payload = []
+    visible = []
+
     for paragraph in paragraphs:
+
         for run in paragraph.runs:
-            hidden = _is_stealth_font(_run_font_name(run))
+
+            hidden = _is_stealth_font(
+                _run_font_name(run)
+            )
+
             for char in run.text:
-                payload.append((char, hidden))
-                if not hidden:          # stealth chars have no visible glyph
-                    visible.append(char)
+
+                payload.append(
+                    (
+                        char,
+                        hidden
+                    )
+                )
+
+                if not hidden:
+
+                    visible.append(
+                        char
+                    )
+
     return payload, "".join(visible)
 
 
 def _parse_docx_payload(docx_path):
-    """Pull the body/header/footer payloads and page geometry from the docx.
-
-    Header and footer text lives outside the body (in the section), so it is read
-    separately here and later placed on every page. The top/bottom margins are
-    returned in points so rendered lines can be classified into those three
-    regions by y-position. Only the first section is consulted (the common case).
     """
-    doc = Document(docx_path)
-    body = _paragraph_payload(list(_iter_block_items(doc)))
+    Extract body/header/footer payloads and page geometry.
+    """
+
+    doc = Document(
+        docx_path
+    )
+
+    body = _paragraph_payload(
+        list(
+            _iter_block_items(doc)
+        )
+    )
+
     section = doc.sections[0]
-    header = _paragraph_payload(section.header.paragraphs)
-    footer = _paragraph_payload(section.footer.paragraphs)
-    # `.pt` converts EMUs -> points; margins can be None if the doc leaves them
-    # at the Word default (1 inch = 72 pt).
-    top = section.top_margin.pt if section.top_margin is not None else 72.0
-    bottom = section.bottom_margin.pt if section.bottom_margin is not None else 72.0
-    return {"body": body, "header": header, "footer": footer,
-            "top_margin": top, "bottom_margin": bottom}
+
+    header = _paragraph_payload(
+        section.header.paragraphs
+    )
+
+    footer = _paragraph_payload(
+        section.footer.paragraphs
+    )
+
+    top = (
+        section.top_margin.pt
+        if section.top_margin is not None
+        else 72.0
+    )
+
+    bottom = (
+        section.bottom_margin.pt
+        if section.bottom_margin is not None
+        else 72.0
+    )
+
+    return {
+        "body": body,
+        "header": header,
+        "footer": footer,
+        "top_margin": top,
+        "bottom_margin": bottom,
+    }
 
 
-def _render_docx_to_pdf(docx_path, ttf_dir, workdir, soffice):
-    """Render the ORIGINAL docx to PDF with LibreOffice.
+# ============================================================================
+# LIBREOFFICE RENDERING
+# ============================================================================
 
-    Rendering the real document (rather than re-typesetting it ourselves) is what
-    makes the PDF look identical -- margins, wrapping, images, and formatting are
-    all whatever the doc already says. The Evil Fonts must be visible to
-    LibreOffice for the disguise to render, so if a ttf_dir is given we point
-    fontconfig at it via a throwaway config instead of installing the fonts
-    system-wide.
+def _render_docx_to_pdf(
+    docx_path,
+    ttf_dir,
+    workdir,
+    soffice
+):
     """
-    # Resolve to absolute before any cwd changes (below, for the soffice
-    # subprocess) so a relative path the caller passed still resolves against
-    # the original working directory, not soffice's.
-    docx_path = os.path.abspath(docx_path)
+    Render the original DOCX through LibreOffice.
+    """
 
-    env = dict(os.environ)
+    docx_path = os.path.abspath(
+        docx_path
+    )
+
+    env = dict(
+        os.environ
+    )
+
     if ttf_dir:
-        # Build a temporary fontconfig that adds ttf_dir on top of the system
-        # fonts, and expose it through FONTCONFIG_FILE for this render only.
-        conf = os.path.join(workdir, "fonts.conf")
-        cache = os.path.join(workdir, "fccache")
-        os.makedirs(cache, exist_ok=True)
-        with open(conf, "w") as handle:
+
+        conf = os.path.join(
+            workdir,
+            "fonts.conf"
+        )
+
+        cache = os.path.join(
+            workdir,
+            "fccache"
+        )
+
+        os.makedirs(
+            cache,
+            exist_ok=True
+        )
+
+        with open(
+            conf,
+            "w"
+        ) as handle:
+
             handle.write(
                 '<?xml version="1.0"?>\n'
                 '<!DOCTYPE fontconfig SYSTEM "fonts.dtd">\n'
                 "<fontconfig>\n"
                 f"  <dir>{os.path.abspath(ttf_dir)}</dir>\n"
                 f"  <cachedir>{cache}</cachedir>\n"
-                '  <include ignore_missing="yes">/etc/fonts/fonts.conf</include>\n'
+                '  <include ignore_missing="yes">'
+                '/etc/fonts/fonts.conf'
+                '</include>\n'
                 "</fontconfig>\n"
             )
-        env["FONTCONFIG_FILE"] = conf
+
+        env[
+            "FONTCONFIG_FILE"
+        ] = conf
+
         try:
-            subprocess.run(["fc-cache", "-f"], env=env,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        except FileNotFoundError:
-            # fc-cache (fontconfig) isn't available on Windows; --ttf-dir is
-            # exposed to LibreOffice via FONTCONFIG_FILE regardless, but without
-            # fc-cache to prime it, a stale/missing cache may make LibreOffice
-            # miss the fonts on the first run.
-            logger.warning(
-                "'fc-cache' not found -- skipping font cache refresh. If the "
-                "disguise doesn't render, try running the command again."
+
+            subprocess.run(
+                [
+                    "fc-cache",
+                    "-f"
+                ],
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
             )
-    # A private user profile avoids clashing with any LibreOffice already running.
-    # Building the URI by hand (e.g. "file://" + a Windows path) produces a
-    # malformed "file://C:\..." URI -- backslashes instead of "/", and no
-    # leading slash before the drive letter -- which LibreOffice on Windows
-    # can't resolve, manifesting as a "bootstrap.ini is corrupt" popup.
-    # Path.as_uri() builds a correct file:// URI on every platform.
-    profile = pathlib.Path(workdir, "loprofile").resolve().as_uri()
-    # On Windows, soffice.exe resolves bootstrap.ini relative to its own
-    # working directory -- double-clicking it in Explorer sets that
-    # automatically, but a subprocess otherwise inherits our cwd instead,
-    # which soffice.exe misreads as a corrupt config. Run it from its own
-    # directory to match how Explorer launches it.
-    soffice_dir = os.path.dirname(soffice) or None
+
+        except FileNotFoundError:
+
+            logger.warning(
+                "fc-cache not found. "
+                "Skipping font cache refresh."
+            )
+
+    profile = (
+        pathlib.Path(
+            workdir,
+            "loprofile"
+        )
+        .resolve()
+        .as_uri()
+    )
+
+    soffice_dir = (
+        os.path.dirname(
+            soffice
+        )
+        or None
+    )
+
     try:
+
         result = subprocess.run(
-            [soffice, "--headless", "--convert-to", "pdf", "--outdir", workdir,
-             docx_path, f"-env:UserInstallation={profile}"],
-            env=env, cwd=soffice_dir,
-            capture_output=True, text=True,
+            [
+                soffice,
+                "--headless",
+                "--convert-to",
+                "pdf",
+                "--outdir",
+                workdir,
+                docx_path,
+                f"-env:UserInstallation={profile}",
+            ],
+            env=env,
+            cwd=soffice_dir,
+            capture_output=True,
+            text=True,
         )
+
     except FileNotFoundError:
+
         raise RuntimeError(
-            f"Could not find the LibreOffice binary '{soffice}'. On Windows, "
-            "it's usually not on PATH even after installing -- pass --soffice "
-            "with the full path, e.g. "
-            "--soffice \"C:\\Program Files\\LibreOffice\\program\\soffice.exe\"."
-        ) from None
+            f"Could not find LibreOffice binary: {soffice}"
+        )
+
     if result.returncode != 0:
-        detail = (result.stderr or result.stdout or "").strip()
+
+        detail = (
+            result.stderr
+            or result.stdout
+            or ""
+        ).strip()
+
         raise RuntimeError(
-            f"LibreOffice failed to convert '{docx_path}' to PDF "
-            f"(exit code {result.returncode})."
-            + (f"\n{detail}" if detail else " No further output was captured.")
+            "LibreOffice failed to convert DOCX."
+            + (
+                f"\n{detail}"
+                if detail
+                else ""
+            )
         )
-    # LibreOffice names the output after the input stem, in --outdir.
-    out = os.path.join(
-        workdir, os.path.splitext(os.path.basename(docx_path))[0] + ".pdf")
-    if not os.path.exists(out):
-        # soffice can exit 0 even when it fails (e.g. "source file could not
-        # be loaded" for a missing/corrupt input) rather than a nonzero code,
-        # so surface whatever it printed here too.
-        detail = (result.stderr or result.stdout or "").strip()
+
+    output_pdf = os.path.join(
+        workdir,
+        os.path.splitext(
+            os.path.basename(
+                docx_path
+            )
+        )[0]
+        + ".pdf"
+    )
+
+    if not os.path.exists(
+        output_pdf
+    ):
+
+        detail = (
+            result.stderr
+            or result.stdout
+            or ""
+        ).strip()
+
         raise RuntimeError(
-            f"LibreOffice produced no PDF for '{docx_path}'."
-            + (f"\n{detail}" if detail else " No further output was captured.")
+            "LibreOffice produced no PDF."
+            + (
+                f"\n{detail}"
+                if detail
+                else ""
+            )
         )
-    return out
+
+    return output_pdf
 
 
-def _split_row_by_gaps(row, gap_factor=2.5):
-    """Split a left-to-right sorted row of glyphs into segments wherever the gap
-    between consecutive glyphs is much larger than the text size (an inline
-    image, a tab stop, or a column break). Normal inter-word spaces stay joined."""
+# ============================================================================
+# PDF GLYPH EXTRACTION
+# ============================================================================
+
+def _split_row_by_gaps(
+    row,
+    gap_factor=2.5
+):
+    """
+    Split a row into segments when large gaps occur.
+    """
+
     if not row:
+
         return []
-    segments, current = [], [row[0]]
-    for prev, glyph in zip(row, row[1:]):
-        gap = glyph.x0 - prev.x1
-        if gap > gap_factor * max(prev.size, glyph.size, 1.0):
-            segments.append(current)
-            current = [glyph]
+
+    segments = []
+
+    current = [
+        row[0]
+    ]
+
+    for prev, glyph in zip(
+        row,
+        row[1:]
+    ):
+
+        gap = (
+            glyph.x0
+            - prev.x1
+        )
+
+        if gap > gap_factor * max(
+            prev.size,
+            glyph.size,
+            1.0
+        ):
+
+            segments.append(
+                current
+            )
+
+            current = [
+                glyph
+            ]
+
         else:
-            current.append(glyph)
-    segments.append(current)
+
+            current.append(
+                glyph
+            )
+
+    segments.append(
+        current
+    )
+
     return segments
 
 
-def _visible_lines(pdf_path, y_tol=3.0):
-    """Recover the on-page text lines from the rendered PDF.
-
-    We cluster the glyphs ourselves rather than trusting pdfminer's own line
-    grouping, because the zero-width stealth glyphs sit on top of their neighbours
-    and scramble pdfminer's ordering. Returns, per page, its size and a list of
-    line segments -- each a {"box": (x0,y0,x1,y1), "n": visible_glyph_count} -- in
-    reading order. Those boxes are exactly where the copy layer gets placed.
+def _visible_lines(
+    pdf_path,
+    y_tol=3.0
+):
     """
+    Recover rendered visible PDF glyphs.
+
+    Each line contains:
+
+        box:
+            bounding box
+
+        n:
+            number of visible glyphs
+
+        chars:
+            actual rendered PDF characters
+    """
+
     pages = []
-    for layout in _extract_pages(pdf_path):
-        # pdfminer nests glyphs inside containers/figures; flatten to every LTChar.
-        glyphs, stack = [], [layout]
+
+    for layout in _extract_pages(
+        pdf_path
+    ):
+
+        glyphs = []
+
+        stack = [
+            layout
+        ]
+
         while stack:
+
             obj = stack.pop()
-            if isinstance(obj, _LTChar):
-                glyphs.append(obj)
-            elif hasattr(obj, "__iter__"):
+
+            if isinstance(
+                obj,
+                _LTChar
+            ):
+
+                glyphs.append(
+                    obj
+                )
+
+            elif hasattr(
+                obj,
+                "__iter__"
+            ):
+
                 try:
-                    stack.extend(list(obj))
+
+                    stack.extend(
+                        list(obj)
+                    )
+
                 except TypeError:
+
                     pass
-        # A glyph is hidden if it is drawn with the stealth font (robust), is
-        # ~zero-width (belt-and-braces), or is a native decorative glyph (list
-        # bullets etc.) that never appears in the payload. Everything else is a
-        # visible glyph, and the visible-glyph count per line is what anchors
-        # the copy layer.
-        visible = [g for g in glyphs
-                   if not _is_stealth_font(g.fontname)
-                   and (g.x1 - g.x0) > 0.1 * max(g.size, 1.0)
-                   and not _is_decorative_glyph(g.get_text())]
-        # Group glyphs into rows: sort top-to-bottom (PDF y grows upward, so -y0)
-        # then left-to-right, and start a new row when the baseline jumps.
-        visible.sort(key=lambda g: (-g.y0, g.x0))
-        rows, current, base_y = [], [], None
+
+        # ---------------------------------------------------------------
+        # Filter visible glyphs
+        # ---------------------------------------------------------------
+
+        visible = []
+
+        for g in glyphs:
+
+            if _is_stealth_font(
+                g.fontname
+            ):
+
+                continue
+
+            if (
+                g.x1
+                - g.x0
+            ) <= 0.1 * max(
+                g.size,
+                1.0
+            ):
+
+                continue
+
+            if _is_decorative_glyph(
+                g.get_text()
+            ):
+
+                continue
+
+            visible.append(
+                g
+            )
+
+        # ---------------------------------------------------------------
+        # Sort top-to-bottom and left-to-right
+        # ---------------------------------------------------------------
+
+        visible.sort(
+            key=lambda g: (
+                -g.y0,
+                g.x0
+            )
+        )
+
+        rows = []
+
+        current = []
+
+        base_y = None
+
         for g in visible:
-            if base_y is None or abs(g.y0 - base_y) <= y_tol:
-                current.append(g)
-                base_y = g.y0 if base_y is None else base_y
+
+            if (
+                base_y is None
+                or abs(
+                    g.y0
+                    - base_y
+                ) <= y_tol
+            ):
+
+                current.append(
+                    g
+                )
+
+                if base_y is None:
+
+                    base_y = g.y0
+
             else:
-                rows.append(current)
-                current, base_y = [g], g.y0
+
+                rows.append(
+                    current
+                )
+
+                current = [
+                    g
+                ]
+
+                base_y = g.y0
+
         if current:
-            rows.append(current)
+
+            rows.append(
+                current
+            )
+
         lines = []
+
         for row in rows:
-            row.sort(key=lambda g: g.x0)
-            # Split the row wherever there is a large horizontal gap (an inline
-            # image, a column break, etc.) so the invisible copy layer never
-            # stretches across an image and becomes selectable "behind" it.
-            for segment in _split_row_by_gaps(row):
-                # Tight bounding box of this segment's glyphs = where its slice of
-                # the payload will be squished in.
-                box = (min(g.x0 for g in segment), min(g.y0 for g in segment),
-                       max(g.x1 for g in segment), max(g.y1 for g in segment))
-                lines.append({"box": box, "n": len(segment)})
-        pages.append({"size": (layout.width, layout.height), "lines": lines})
+
+            row.sort(
+                key=lambda g: g.x0
+            )
+
+            segments = _split_row_by_gaps(
+                row
+            )
+
+            for segment in segments:
+
+                box = (
+                    min(
+                        g.x0
+                        for g in segment
+                    ),
+
+                    min(
+                        g.y0
+                        for g in segment
+                    ),
+
+                    max(
+                        g.x1
+                        for g in segment
+                    ),
+
+                    max(
+                        g.y1
+                        for g in segment
+                    )
+                )
+
+                chars = [
+                    g.get_text()
+                    for g in segment
+                ]
+
+                lines.append(
+                    {
+                        "box": box,
+                        "n": len(chars),
+                        "chars": chars,
+                    }
+                )
+
+        pages.append(
+            {
+                "size": (
+                    layout.width,
+                    layout.height
+                ),
+                "lines": lines,
+            }
+        )
+
     return pages
 
 
-def _assign_payload(payload, counts):
-    """Split the payload into one string per line, matching the rendered layout.
+# ============================================================================
+# CHARACTER MATCHING
+# ============================================================================
 
-    `counts[i]` is how many visible glyphs line i actually has. We build a lookup
-    from "nth visible character" -> "line index", then replay the payload: every
-    visible char advances one slot through that lookup, while hidden chars simply
-    ride along on whichever line the surrounding visible chars are on (so an
-    injected stealth run stays with the words it was hidden between). If the
-    counts don't cover the payload (a layout we couldn't line up), the remainder
-    falls onto the last line so nothing is dropped from a copy.
+def _chars_match(
+    docx_char,
+    pdf_char
+):
     """
-    visible_line = []
-    for line_index, n in enumerate(counts):
-        visible_line.extend([line_index] * n)
-    total = len(visible_line)
-    buffers = ["" for _ in counts]
-    pointer = 0
-    for char, hidden in payload:
-        if not counts:
-            break
-        line_index = visible_line[pointer] if pointer < total else len(counts) - 1
-        if not hidden:                 # only visible chars consume a glyph slot
-            pointer += 1
-        buffers[line_index] += char
-    return buffers
-
-
-def _draw_invisible(pdf, text, box, min_size=4.0, max_size=144.0):
-    """Lay `text` into `box` as invisible, selectable text (the copy layer).
-
-    Render mode 3 draws no ink but keeps the text fully selectable and copyable in
-    every viewer -- the same trick OCR "searchable" PDFs use. The horizontal scale
-    compresses the whole string (which is longer than the visible line, since it
-    also carries the hidden chars) to exactly the line's width, so it sits under
-    the matching visible text with no overlap or spill.
-
-    The font size is derived from the line's own bounding-box height rather than
-    a fixed constant, so the invisible text -- and the selection highlight a
-    viewer draws for it -- roughly matches the size of the visible text underneath
-    (a heading and a footnote no longer both highlight at the same fixed size).
+    Determine whether a DOCX character and PDF glyph represent
+    the same visible character.
     """
-    if not text:
-        return
-    x0, y0, x1, y1 = box
-    width = max(1.0, x1 - x0)
-    size = max(min_size, min(max_size, y1 - y0))
-    natural = _pdfmetrics.stringWidth(text, _INK_FONT, size) or 1.0
-    text_obj = pdf.beginText(x0, y0)
-    text_obj.setFont(_INK_FONT, size)
-    text_obj.setTextRenderMode(3)                     # invisible but selectable
-    text_obj.setHorizScale(width / natural * 100.0)   # squish onto the line's width
-    text_obj.textOut(text)
-    pdf.drawText(text_obj)
 
-
-def _resolve_ink_font(ink_font):
-    """Pick the TTF used to draw the (invisible) copy layer.
-
-    Its shape never shows, so any Unicode-capable font works; we just need real
-    per-character widths so the text lays out sanely. Prefer an explicit font,
-    otherwise ask fontconfig for a broad system sans.
-    """
-    if ink_font:
-        return ink_font
-    for query in ("DejaVu Sans", "Liberation Sans", "sans-serif"):
-        try:
-            found = subprocess.run(
-                ["fc-match", "-f", "%{file}", query],
-                capture_output=True, text=True).stdout.strip()
-            if found and os.path.exists(found):
-                return found
-        except FileNotFoundError:
-            break
-    raise RuntimeError(
-        "Could not auto-detect a system font for the invisible copy layer "
-        "(this uses 'fc-match', which isn't available on Windows and may be "
-        "missing elsewhere too). Pass --ink-font pointing at any TTF on your "
-        "system, e.g. --ink-font \"C:\\Windows\\Fonts\\times.ttf\" on Windows, "
-        "or --ink-font /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf on Linux."
+    return (
+        docx_char
+        == pdf_char
     )
 
 
-def create_pdf(input_docx, output_pdf, ttf_dir=None,
-               dpi=200, soffice="soffice", ink_font=None, title="Untitled",
-               author=None, subject=None, producer=None):
-    """Convert an Evil Font DOCX into a copy-paste-safe PDF that looks identical.
-
-    Hidden (stealth) text is detected structurally -- any font named '<prefix> 0'
-    -- so `font_name_in` need not match the doc exactly; it is kept only for CLI
-    compatibility. `ttf_dir` is the folder of Evil Font TTFs (e.g.
-    output_dir/ttffonts); it is exposed to LibreOffice so the disguise renders.
-    If the fonts are already installed system-wide it may be omitted.
+def _assign_payload(
+    payload,
+    lines,
+    debug=False
+):
     """
-    _pdfmetrics.registerFont(_RLTTFont(_INK_FONT, _resolve_ink_font(ink_font)))
+    Assign DOCX payload to rendered PDF lines one character at a time.
 
-    # 1. Read the text to hide (body + header + footer) and the page margins.
-    info = _parse_docx_payload(input_docx)
-    body_payload, body_visible = info["body"]
-    header_payload, _ = info["header"]
-    footer_payload, _ = info["footer"]
-    top_margin, bottom_margin = info["top_margin"], info["bottom_margin"]
-    has_header, has_footer = bool(header_payload), bool(footer_payload)
+    Debug output only reports alignment problems and recovery actions.
+    Successful character matches are silent.
+    """
 
-    # 2. Render the doc for its exact look, and recover the line boxes + a raster
-    #    of each page. (Temp dir is cleaned up on exit; the images stay in memory.)
-    with tempfile.TemporaryDirectory() as workdir:
-        look_pdf = _render_docx_to_pdf(input_docx, ttf_dir, workdir, soffice)
-        pages = _visible_lines(look_pdf)
-        try:
-            images = _convert_from_path(look_pdf, dpi=dpi)
-        except _PDFInfoNotInstalledError:
-            raise RuntimeError(
-                "Could not find poppler's 'pdfinfo'/'pdftoppm' (used by pdf2image "
-                "to rasterise the page). On Windows, install poppler and add its "
-                "'Library\\bin' folder to PATH -- see "
-                "https://github.com/oschwartz10612/poppler-windows -- then open a "
-                "new terminal so PATH changes take effect. On Linux/macOS, install "
-                "the 'poppler-utils' package."
-            ) from None
+    buffers = [
+        ""
+        for _ in lines
+    ]
 
-    # 3. Classify every rendered line as header / body / footer by its y-position
-    #    against the margins. Headers/footers sit in the margin bands; everything
-    #    between the margins is body.
-    page_regions = []
-    for page in pages:
-        page_height = page["size"][1]
-        regions = {"header": [], "body": [], "footer": []}
-        for line in page["lines"]:                    # already top -> bottom
-            y0 = line["box"][1]
-            if has_header and y0 >= page_height - top_margin - _REGION_TOL:
-                regions["header"].append(line)
-            elif has_footer and y0 <= bottom_margin + _REGION_TOL:
-                regions["footer"].append(line)
+    # ---------------------------------------------------------------
+    # Flatten rendered PDF glyphs
+    # ---------------------------------------------------------------
+
+    rendered = []
+
+    for line_index, line in enumerate(
+        lines
+    ):
+
+        for glyph_index, char in enumerate(
+            line["chars"]
+        ):
+
+            rendered.append(
+                {
+                    "line_index": line_index,
+                    "glyph_index": glyph_index,
+                    "char": char,
+                }
+            )
+
+    pdf_index = 0
+
+    mismatch_count = 0
+    pdf_extra_count = 0
+    missing_glyph_count = 0
+    exhausted_count = 0
+
+    # ---------------------------------------------------------------
+    # Walk DOCX payload character-by-character
+    # ---------------------------------------------------------------
+
+    for payload_index, (
+        docx_char,
+        hidden
+    ) in enumerate(
+        payload
+    ):
+
+        # -----------------------------------------------------------
+        # Hidden Evil Font character
+        # -----------------------------------------------------------
+
+        if hidden:
+
+            if pdf_index > 0:
+
+                line_index = rendered[
+                    pdf_index - 1
+                ][
+                    "line_index"
+                ]
+
+            elif rendered:
+
+                line_index = rendered[
+                    0
+                ][
+                    "line_index"
+                ]
+
             else:
-                regions["body"].append(line)
-        page_regions.append(regions)
 
-    # 4. Map the body payload across all body lines (it flows page to page). A
-    #    count mismatch here means the rendered glyphs didn't line up with the
-    #    doc's visible chars (unusual layout), so we warn rather than fail.
-    body_counts = [line["n"] for regions in page_regions
-                   for line in regions["body"]]
-    if sum(body_counts) and sum(body_counts) != len(body_visible):
-        logger.warning("body glyph/char count mismatch (%d vs %d); copy-layer "
-                       "alignment may be approximate for this layout.",
-                       sum(body_counts), len(body_visible))
-    body_text = _assign_payload(body_payload, body_counts)
+                line_index = (
+                    len(lines)
+                    - 1
+                )
 
-    # 5. Assemble each page: the rasterised look underneath, the invisible copy
-    #    layer on top, positioned line-by-line.
-    pdf = _rl_canvas.Canvas(output_pdf)
+            if line_index >= 0:
+
+                buffers[
+                    line_index
+                ] += docx_char
+
+            continue
+
+        # -----------------------------------------------------------
+        # PDF has no more glyphs
+        # -----------------------------------------------------------
+
+        if pdf_index >= len(
+            rendered
+        ):
+
+            exhausted_count += 1
+
+            if buffers:
+
+                buffers[
+                    -1
+                ] += docx_char
+
+            if debug:
+
+                print(
+                    "[PDF EXHAUSTED] "
+                    f"DOCX={repr(docx_char)} "
+                    f"payload_index={payload_index}"
+                )
+
+            continue
+
+        # -----------------------------------------------------------
+        # Current PDF glyph
+        # -----------------------------------------------------------
+
+        pdf_glyph = rendered[
+            pdf_index
+        ]
+
+        pdf_char = pdf_glyph[
+            "char"
+        ]
+
+        line_index = pdf_glyph[
+            "line_index"
+        ]
+
+        # -----------------------------------------------------------
+        # Normal match
+        # -----------------------------------------------------------
+
+        if _chars_match(
+            docx_char,
+            pdf_char
+        ):
+
+            buffers[
+                line_index
+            ] += docx_char
+
+            pdf_index += 1
+
+            continue
+
+        # -----------------------------------------------------------
+        # Mismatch
+        # -----------------------------------------------------------
+
+        mismatch_count += 1
+
+        if debug:
+
+            print(
+                "[MISMATCH] "
+                f"DOCX={repr(docx_char)} "
+                f"PDF={repr(pdf_char)} "
+                f"payload_index={payload_index} "
+                f"pdf_index={pdf_index}"
+            )
+
+        # -----------------------------------------------------------
+        # Look ahead for DOCX character in PDF
+        # -----------------------------------------------------------
+
+        found_index = None
+
+        for lookahead in range(
+            1,
+            6
+        ):
+
+            candidate_index = (
+                pdf_index
+                + lookahead
+            )
+
+            if (
+                candidate_index
+                >= len(rendered)
+            ):
+
+                break
+
+            candidate_char = rendered[
+                candidate_index
+            ][
+                "char"
+            ]
+
+            if _chars_match(
+                docx_char,
+                candidate_char
+            ):
+
+                found_index = (
+                    candidate_index
+                )
+
+                break
+
+        # -----------------------------------------------------------
+        # PDF has extra glyphs
+        # -----------------------------------------------------------
+
+        if found_index is not None:
+
+            skipped = "".join(
+                item[
+                    "char"
+                ]
+                for item in rendered[
+                    pdf_index:found_index
+                ]
+            )
+
+            pdf_extra_count += len(
+                skipped
+            )
+
+            if debug:
+
+                print(
+                    "[PDF EXTRA GLYPHS] "
+                    f"skipping={repr(skipped)} "
+                    f"before={repr(docx_char)}"
+                )
+
+            pdf_index = found_index
+
+            line_index = rendered[
+                pdf_index
+            ][
+                "line_index"
+            ]
+
+            buffers[
+                line_index
+            ] += docx_char
+
+            pdf_index += 1
+
+            continue
+
+        # -----------------------------------------------------------
+        # DOCX character has no matching PDF glyph
+        # -----------------------------------------------------------
+
+        missing_glyph_count += 1
+
+        if debug:
+
+            print(
+                "[DOCX GLYPH MISSING] "
+                f"preserving={repr(docx_char)} "
+                f"against_pdf={repr(pdf_char)}"
+            )
+
+        buffers[
+            line_index
+        ] += docx_char
+
+        # Do not advance PDF index.
+        #
+        # The next DOCX character will continue trying to match
+        # the current PDF glyph.
+
+    # ---------------------------------------------------------------
+    # Summary
+    # ---------------------------------------------------------------
+
+    if debug:
+
+        print(
+            "\n"
+            "[ALIGNMENT SUMMARY] "
+            f"mismatches={mismatch_count}, "
+            f"pdf_extra_glyphs={pdf_extra_count}, "
+            f"docx_missing_glyphs={missing_glyph_count}, "
+            f"pdf_exhausted_chars={exhausted_count}"
+        )
+
+    return buffers
+
+
+# ============================================================================
+# INVISIBLE PDF TEXT
+# ============================================================================
+
+def _draw_invisible(
+    pdf,
+    text,
+    box,
+    min_size=4.0,
+    max_size=144.0
+):
+    """
+    Draw invisible but selectable text over a line.
+    """
+
+    if not text:
+
+        return
+
+    x0, y0, x1, y1 = box
+
+    width = max(
+        1.0,
+        x1 - x0
+    )
+
+    size = max(
+        min_size,
+        min(
+            max_size,
+            y1 - y0
+        )
+    )
+
+    natural = _pdfmetrics.stringWidth(
+        text,
+        _INK_FONT,
+        size
+    )
+
+    if not natural:
+
+        natural = 1.0
+
+    text_obj = pdf.beginText(
+        x0,
+        y0
+    )
+
+    text_obj.setFont(
+        _INK_FONT,
+        size
+    )
+
+    text_obj.setTextRenderMode(
+        3
+    )
+
+    text_obj.setHorizScale(
+        width
+        / natural
+        * 100.0
+    )
+
+    text_obj.textOut(
+        text
+    )
+
+    pdf.drawText(
+        text_obj
+    )
+
+
+# ============================================================================
+# INK FONT RESOLUTION
+# ============================================================================
+
+def _resolve_ink_font(
+    ink_font
+):
+    """
+    Find a Unicode-capable font for invisible PDF text.
+    """
+
+    if ink_font:
+
+        return ink_font
+
+    for query in (
+        "DejaVu Sans",
+        "Liberation Sans",
+        "sans-serif",
+    ):
+
+        try:
+
+            found = subprocess.run(
+                [
+                    "fc-match",
+                    "-f",
+                    "%{file}",
+                    query,
+                ],
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+
+            if (
+                found
+                and os.path.exists(
+                    found
+                )
+            ):
+
+                return found
+
+        except FileNotFoundError:
+
+            break
+
+    raise RuntimeError(
+        "Could not find a Unicode-capable ink font. "
+        "Pass --ink-font explicitly."
+    )
+
+
+# ============================================================================
+# MAIN PDF CREATION
+# ============================================================================
+
+def create_pdf(
+    input_docx,
+    output_pdf,
+    ttf_dir=None,
+    dpi=200,
+    soffice="soffice",
+    ink_font=None,
+    title="Untitled",
+    author=None,
+    subject=None,
+    producer=None,
+    debug=False
+):
+    """
+    Convert Evil Font DOCX to PDF.
+
+    Visible appearance:
+        Rasterized image of the LibreOffice-rendered DOCX.
+
+    Copyable text:
+        Invisible PDF text layer containing the complete DOCX payload,
+        including hidden Evil Font characters.
+    """
+
+    # ---------------------------------------------------------------
+    # Register invisible text font
+    # ---------------------------------------------------------------
+
+    _pdfmetrics.registerFont(
+        _RLTTFont(
+            _INK_FONT,
+            _resolve_ink_font(
+                ink_font
+            )
+        )
+    )
+
+    # ---------------------------------------------------------------
+    # Parse DOCX payload
+    # ---------------------------------------------------------------
+
+    info = _parse_docx_payload(
+        input_docx
+    )
+
+    body_payload, body_visible = info[
+        "body"
+    ]
+
+    header_payload, header_visible = info[
+        "header"
+    ]
+
+    footer_payload, footer_visible = info[
+        "footer"
+    ]
+
+    top_margin = info[
+        "top_margin"
+    ]
+
+    bottom_margin = info[
+        "bottom_margin"
+    ]
+
+    has_header = bool(
+        header_payload
+    )
+
+    has_footer = bool(
+        footer_payload
+    )
+
+    # ---------------------------------------------------------------
+    # Render DOCX through LibreOffice
+    # ---------------------------------------------------------------
+
+    with tempfile.TemporaryDirectory() as workdir:
+
+        look_pdf = _render_docx_to_pdf(
+            input_docx,
+            ttf_dir,
+            workdir,
+            soffice
+        )
+
+        pages = _visible_lines(
+            look_pdf
+        )
+
+        try:
+
+            images = _convert_from_path(
+                look_pdf,
+                dpi=dpi
+            )
+
+        except _PDFInfoNotInstalledError:
+
+            raise RuntimeError(
+                "Poppler is not installed or not available on PATH."
+            )
+
+    # ---------------------------------------------------------------
+    # Classify rendered lines
+    # ---------------------------------------------------------------
+
+    page_regions = []
+
+    for page in pages:
+
+        page_height = page[
+            "size"
+        ][1]
+
+        regions = {
+            "header": [],
+            "body": [],
+            "footer": [],
+        }
+
+        for line in page[
+            "lines"
+        ]:
+
+            y0 = line[
+                "box"
+            ][1]
+
+            if (
+                has_header
+                and y0
+                >= page_height
+                - top_margin
+                - _REGION_TOL
+            ):
+
+                regions[
+                    "header"
+                ].append(
+                    line
+                )
+
+            elif (
+                has_footer
+                and y0
+                <= bottom_margin
+                + _REGION_TOL
+            ):
+
+                regions[
+                    "footer"
+                ].append(
+                    line
+                )
+
+            else:
+
+                regions[
+                    "body"
+                ].append(
+                    line
+                )
+
+        page_regions.append(
+            regions
+        )
+
+    # ---------------------------------------------------------------
+    # Match body character-by-character
+    # ---------------------------------------------------------------
+
+    body_lines = [
+        line
+        for regions in page_regions
+        for line in regions[
+            "body"
+        ]
+    ]
+
+    body_text = _assign_payload(
+        body_payload,
+        body_lines,
+        debug=debug
+    )
+
+    # ---------------------------------------------------------------
+    # Create output PDF
+    # ---------------------------------------------------------------
+
+    pdf = _rl_canvas.Canvas(
+        output_pdf
+    )
+
     if title:
-        pdf.setTitle(title)
+
+        pdf.setTitle(
+            title
+        )
+
     if author:
-        pdf.setAuthor(author)
-    if subject is None:
-        pdf.setAuthor("")
-    else:
-        pdf.setSubject(subject)
-    if producer is None:
-        pdf.setProducer("")
-    else:
-        pdf.setProducer(producer)
+
+        pdf.setAuthor(
+            author
+        )
+
+    if subject is not None:
+
+        pdf.setSubject(
+            subject
+        )
+
+    if producer is not None:
+
+        pdf.setProducer(
+            producer
+        )
 
     body_index = 0
-    for page_number, page in enumerate(pages):
-        page_width, page_height = page["size"]
-        pdf.setPageSize((page_width, page_height))
-        # The full-page image is the visible layer; it carries all formatting and
-        # images and, being an image, contributes no selectable text of its own.
-        pdf.drawImage(_ImageReader(images[page_number]), 0, 0,
-                      width=page_width, height=page_height)
-        regions = page_regions[page_number]
-        # Header/footer text repeats on every page, so re-place it per page.
+
+    for page_number, page in enumerate(
+        pages
+    ):
+
+        page_width, page_height = page[
+            "size"
+        ]
+
+        pdf.setPageSize(
+            (
+                page_width,
+                page_height
+            )
+        )
+
+        # -----------------------------------------------------------
+        # Visible rasterized page
+        # -----------------------------------------------------------
+
+        pdf.drawImage(
+            _ImageReader(
+                images[
+                    page_number
+                ]
+            ),
+            0,
+            0,
+            width=page_width,
+            height=page_height,
+        )
+
+        regions = page_regions[
+            page_number
+        ]
+
+        # -----------------------------------------------------------
+        # Header/footer payload
+        # -----------------------------------------------------------
+
         for region_payload, region_lines in (
-                (header_payload, regions["header"]),
-                (footer_payload, regions["footer"])):
-            texts = _assign_payload(region_payload, [ln["n"] for ln in region_lines])
-            for line, text in zip(region_lines, texts):
-                _draw_invisible(pdf, text, line["box"])
-        # Body text is a single stream that continues across page breaks, so we
-        # keep a running index into body_text rather than resetting per page.
-        for line in regions["body"]:
-            _draw_invisible(pdf, body_text[body_index], line["box"])
+
+            (
+                header_payload,
+                regions[
+                    "header"
+                ]
+            ),
+
+            (
+                footer_payload,
+                regions[
+                    "footer"
+                ]
+            ),
+
+        ):
+
+            region_text = _assign_payload(
+                region_payload,
+                region_lines,
+                debug=debug
+            )
+
+            for line, text in zip(
+                region_lines,
+                region_text
+            ):
+
+                _draw_invisible(
+                    pdf,
+                    text,
+                    line[
+                        "box"
+                    ]
+                )
+
+        # -----------------------------------------------------------
+        # Body payload
+        # -----------------------------------------------------------
+
+        for line in regions[
+            "body"
+        ]:
+
+            if body_index < len(
+                body_text
+            ):
+
+                _draw_invisible(
+                    pdf,
+                    body_text[
+                        body_index
+                    ],
+                    line[
+                        "box"
+                    ]
+                )
+
             body_index += 1
+
         pdf.showPage()
+
     pdf.save()
-    logger.debug("[DONE] PDF written -> %s (%d page(s), header=%s footer=%s)",
-                 output_pdf, len(pages), has_header, has_footer)
+
+    logger.debug(
+        "[DONE] PDF written -> %s",
+        output_pdf
+    )
+
     return output_pdf

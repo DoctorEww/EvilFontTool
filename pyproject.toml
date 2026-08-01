@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "evilfonttool"
-version = "2.0.4"
+version = "2.0.5"
 description = "A font-based deception tool for red teaming, security research, and whatever else."
 readme = "README.md"
 license = "MIT"
@@ -31,6 +31,7 @@ Homepage = "https://doctoreww.github.io/EvilFontTool/"
 Repository = "https://github.com/DoctorEww/EvilFontTool"
 Issues = "https://github.com/DoctorEww/EvilFontTool/issues"
 Demo = "https://doctoreww.github.io/EvilFontTool/"
+Lab = "https://github.com/DoctorEww/EvilFontTool/blob/main/labs/README.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/evilfonttool"]
