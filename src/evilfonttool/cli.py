@@ -82,6 +82,7 @@ def setup_parser():
         'pdf',
         help='Convert an Evil Font DOCX into a copy-paste-safe PDF.',
         description=(
+            'EXPERIMENTAL: MAY OR MAY NOT WORK ON WINDOWS'
             'Renders the DOCX with LibreOffice so the PDF looks identical to the '
             'document, then overlays the hidden payload as an invisible copy layer '
             'so it survives copy-paste in every viewer. font_name must match the '

@@ -2,7 +2,7 @@
 
 TRY THE LABS BEFORE READING THIS -- see the [lab README](README.md).
 
-This is the walkthrough for the Evil Font Labs. It shows one possible way to solve each lab, not the only way, and was tested on Ubuntu Desktop.
+This is the walkthrough for the Evil Font Labs. It shows one possible way to solve each lab, not the only way, and was tested on Ubuntu Desktop. There is an issue with the PDF command on Windows...
 
 
 ## Setup / Prerequisites
@@ -14,7 +14,7 @@ This is the walkthrough for the Evil Font Labs. It shows one possible way to sol
 ## Table of Contents
 
 - [Lab 1: Click Fix *Improved* (HTML)](#lab-1-click-fix-improved-html)
-- [Lab 2: New Laptop "Setup" Guide (DOCX -> PDF)](#lab-2-new-laptop-setup-guide-docx---pdf)
+- [Lab 2: New Laptop "Setup" Guide (DOCX or PDF)](#lab-2-new-laptop-setup-guide-docx-or-pdf)
 - [Lab 3: Flags for Sale (PDF or DOCX)](#lab-3-flags-for-sale-pdf-or-docx)
 
 ## Lab 1: Click Fix *Improved* (HTML)
@@ -66,11 +66,13 @@ This is what will be copied
 
 ![validate solution](images/lab1-validatesolution.png)
 
-## Lab 2: New Laptop "Setup" Guide (DOCX -> PDF)
+## Lab 2: New Laptop "Setup" Guide (DOCX or PDF)
 
 **Starting Point:** [new-laptop-setup-guide.docx](resources/new-laptop-setup-guide.docx)
 
-**Goal:** Disguise the commands in the new laptop setup guide docx so that `echo this is where you would put your payload during a red team` (or your favorite command) is copied instead. Then, turn it into a PDF. 
+**Goal:** Disguise the commands in the new laptop setup guide so that `echo this is where you would put your payload during a red team` (or your favorite command) is copied instead. Optionally, turn it into a PDF as well.
+
+>Tip: The `pdf` command may not work reliably on Windows. The DOCX on its own is enough to complete this lab.
 
 1) Install evilfonttool -- see [Installation](../README.md#installation).
 

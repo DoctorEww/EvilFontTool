@@ -11,7 +11,7 @@ Here are a few labs to explore the different concepts of Evil Fonts. They range 
 ## Table of Contents
 
 - [Lab 1: Click Fix *Improved* (HTML)](#lab-1-click-fix-improved-html)
-- [Lab 2: New Laptop "Setup" Guide (DOCX -> PDF)](#lab-2-new-laptop-setup-guide-docx---pdf)
+- [Lab 2: New Laptop "Setup" Guide (DOCX or PDF)](#lab-2-new-laptop-setup-guide-docx-or-pdf)
 - [Lab 3: Flags for Sale (PDF or DOCX)](#lab-3-flags-for-sale-pdf-or-docx)
 - [Lab 4: Evil Font Design (HTML, PDF, or DOCX)](#lab-4-evil-font-design-html-pdf-or-docx)
 - [Lab 5: Creative Evil Font Usage](#lab-5-creative-evil-font-usage)
@@ -21,7 +21,7 @@ Here are a few labs to explore the different concepts of Evil Fonts. They range 
 ## Setup / Prerequisites
 
 - Install EvilFontTool -- see the [main README](../README.md#installation).
-- Labs 2 and 3 can convert a DOCX to PDF, which needs LibreOffice and poppler-utils installed and on your `PATH` -- see [Dependencies](../README.md#dependencies) for OS-specific install steps.
+- Labs 2 and 3 can convert a DOCX to PDF, which needs LibreOffice and poppler-utils installed and on your `PATH` -- see [Dependencies](../README.md#dependencies) for OS-specific install steps. The `pdf` command may not work reliably on Windows; both labs can be completed with just the DOCX.
 - Get familiar with the `create`, `doc`, and `pdf` commands (see [Usage](../README.md#usage)) before starting Lab 1 or Lab 2.
 
 
@@ -38,11 +38,13 @@ Here are a few labs to explore the different concepts of Evil Fonts. They range 
 
 
 
-## Lab 2: New Laptop "Setup" Guide (DOCX -> PDF)
+## Lab 2: New Laptop "Setup" Guide (DOCX or PDF)
 
 **Starting Point:** [new-laptop-setup-guide.docx](resources/new-laptop-setup-guide.docx)
 
-**Goal:** Disguise the commands in the new laptop setup guide so that `echo this is where you would put your payload during a red team` (or your favorite command) is copied instead. Then, turn it into a PDF. 
+**Goal:** Disguise the commands in the new laptop setup guide so that `echo this is where you would put your payload during a red team` (or your favorite command) is copied instead. Optionally, turn it into a PDF as well.
+
+>Tip: The `pdf` command may not work reliably on Windows. The DOCX on its own is enough to complete this lab.
 
 **Learning Objectives:**
 1) Learn how to take an existing DOCX (also designed by Claude) and add Evil Fonts to it.

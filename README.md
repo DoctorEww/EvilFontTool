@@ -58,7 +58,7 @@ Installed automatically via `pip`:
 - `Pillow` — image handling for the PDF pipeline
 
 System requirements (not installed by `pip` — must be on your `PATH`):
-- **[LibreOffice](https://www.libreoffice.org/)** — required for the `pdf` command, which shells out to `soffice --headless` to convert DOCX to PDF
+- **[LibreOffice](https://www.libreoffice.org/)** — required for the `pdf` command, which shells out to `soffice --headless` to convert DOCX to PDF. The `pdf` command is experimental on Windows and may not work as intended.
   - Ubuntu/Debian: `sudo apt install libreoffice`
   - macOS: `brew install --cask libreoffice`
   - Windows: [download installer](https://www.libreoffice.org/download/)
@@ -90,7 +90,7 @@ $bin = (gci ~\Documents\poppler -Recurse -Filter pdftotext.exe)[0].DirectoryName
 
 ## Usage Tips
 
-* Generate fonts and pdf's on Linux. Windows has not been tested. 
+* Generate fonts and pdf's on Linux. The `pdf` command is experimental on Windows and may not work as intended.
 * The pdf command does not work on complex word documents ex. columns. Feel free to open an issue if theres a feature you really want it to support. 
 * To embed fonts, use `doc --ttf-dir <ttffonts_dir>` (EvilFontTool embeds them itself) or Word on Windows. LibreOffice's own "embed fonts" option does not work for Evil Fonts.
 
@@ -196,6 +196,8 @@ evilfonttool pdf <input_docx> <output_file> [--ttf-dir DIR] [--dpi DPI] [--soffi
 ```
 
 Renders the DOCX with LibreOffice so the PDF looks identical to the document, then overlays the hidden payload as an invisible copy layer so it survives copy-paste in every viewer.
+
+> **Windows:** This command is experimental on Windows and may not work as intended.
 
 | Argument | Description |
 |---|---|
