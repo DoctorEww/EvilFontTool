@@ -29,6 +29,12 @@ EvilFontTool hides machine-readable text inside a document that displays complet
 ## Installation
 
 ```bash
+pip install evilfonttool
+```
+
+### From source
+
+```bash
 git clone https://github.com/DoctorEww/EvilFontTool.git
 cd EvilFontTool
 pip install .
