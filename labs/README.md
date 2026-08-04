@@ -5,14 +5,14 @@ Here are a few labs to explore the different concepts of Evil Fonts. They range 
 > Stuck? Check the [walkthrough](walkthrough.md) for a step-by-step solution to Labs 1-3.
 
 
->Like the labs? Leave a star!
+> Like the labs? Leave a star to help others find it!
 
 
 ## Table of Contents
 
 - [Lab 1: Click Fix *Improved* (HTML)](#lab-1-click-fix-improved-html)
-- [Lab 2: New Laptop "Setup" Guide (DOCX or PDF)](#lab-2-new-laptop-setup-guide-docx-or-pdf)
-- [Lab 3: Flags for Sale (PDF or DOCX)](#lab-3-flags-for-sale-pdf-or-docx)
+- [Lab 2: Flags for Sale (PDF or DOCX)](#lab-2-flags-for-sale-pdf-or-docx)
+- [Lab 3: New Laptop "Setup" Guide (DOCX or PDF)](#lab-3-new-laptop-setup-guide-docx-or-pdf)
 - [Lab 4: Evil Font Design (HTML, PDF, or DOCX)](#lab-4-evil-font-design-html-pdf-or-docx)
 - [Lab 5: Creative Evil Font Usage](#lab-5-creative-evil-font-usage)
 - [Continue the journey...](#continue-the-journey)
@@ -27,7 +27,9 @@ Here are a few labs to explore the different concepts of Evil Fonts. They range 
 
 ## Lab 1: Click Fix *Improved* (HTML)
 
-**Starting Point:** [clickfixstarter.html](resources/clickfixstarter.html)
+**Starting Point:** [clickfixstarter.html](https://github.com/DoctorEww/EvilFontTool/raw/refs/heads/main/labs/resources/clickfixstarter.html)
+
+**Walkthrough:** [Step-by-step solution](walkthrough.md#lab-1-click-fix-improved-html)
 
 **Goal:** Make it so when you copy the verification code it actually copies `echo pwned` (or your favorite command) without changing the look of the HTML page. Do not use JavaScript.
 
@@ -38,23 +40,11 @@ Here are a few labs to explore the different concepts of Evil Fonts. They range 
 
 
 
-## Lab 2: New Laptop "Setup" Guide (DOCX or PDF)
-
-**Starting Point:** [new-laptop-setup-guide.docx](resources/new-laptop-setup-guide.docx)
-
-**Goal:** Disguise the commands in the new laptop setup guide so that `echo this is where you would put your payload during a red team` (or your favorite command) is copied instead. Optionally, turn it into a PDF as well.
-
->Tip: The `pdf` command may not work reliably on Windows. The DOCX on its own is enough to complete this lab.
-
-**Learning Objectives:**
-1) Learn how to take an existing DOCX (also designed by Claude) and add Evil Fonts to it.
-2) Observe how Evil Fonts can be embedded into DOCX files or PDF files to create a portable method of Evil Font attacks. 
-
-
-
-## Lab 3: Flags for Sale (PDF or DOCX)
+## Lab 2: Flags for Sale (PDF or DOCX)
 
 **Starting Point:** [Flags for Sale](https://doctoreww.github.io/EvilFontTool/labs/flags-for-sale.html)
+
+**Walkthrough:** [Step-by-step solution](walkthrough.md#lab-2-flags-for-sale-pdf-or-docx)
 
 ```mermaid
 flowchart LR
@@ -75,6 +65,22 @@ flowchart LR
 
 >Tip: This can be solved in lots of different ways even without Evil Fonts... play around if you want! 
 
+
+
+
+## Lab 3: New Laptop "Setup" Guide (DOCX or PDF)
+
+**Starting Point:** [new-laptop-setup-guide.docx](https://github.com/DoctorEww/EvilFontTool/raw/refs/heads/main/labs/resources/new-laptop-setup-guide.docx)
+
+**Walkthrough:** [Step-by-step solution](walkthrough.md#lab-3-new-laptop-setup-guide-docx-or-pdf)
+
+**Goal:** Disguise the commands in the new laptop setup guide so that `echo this is where you would put your payload during a red team` (or your favorite command) is copied instead. Optionally, turn it into a PDF as well.
+
+>Tip: The `pdf` command may not work reliably on Windows. The DOCX on its own is enough to complete this lab.
+
+**Learning Objectives:**
+1) Learn how to take an existing DOCX (also designed by Claude) and add Evil Fonts to it.
+2) Observe how Evil Fonts can be embedded into DOCX files or PDF files to create a portable method of Evil Font attacks. 
 
 
 
