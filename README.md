@@ -21,6 +21,7 @@ EvilFontTool hides machine-readable text inside a document that displays complet
 - [PDFs Woes Explained](#pdfs-woes-explained)
 - [Usage](#usage)
 - [Ethical Use & Disclaimer](#ethical-use--disclaimer)
+- [Staying Safe from Evil Fonts](#staying-safe-from-evil-fonts)
 - [Contributing](#contributing)
 - [Help me somethings not working!](#help-me-somethings-not-working)
 
@@ -226,6 +227,30 @@ evilfonttool pdf output/secret.docx output/secret.pdf --ttf-dir output/fonts/ttf
 ## Ethical Use & Disclaimer
 
 **You are responsible for how you use this tool.** Deploying this technique against systems or individuals without explicit authorization is unethical and may be illegal. The authors provide this tool to help defenders understand and test for this class of vulnerability — not to enable attacks.
+
+---
+## Staying Safe from Evil Fonts
+ 
+This tool was created to help red teamers validate the risks of font-based attacks against their organizations. It was also created to help blue teamers, researchers, and system owners understand the gaps in security that are left by intrinsically trusting user-supplied fonts. Below are some practical recommendations for individuals and industry to address or mitigate the problem fonts pose in modern operating systems and applications.
+ 
+### What can I do against Evil Fonts?
+ 
+* Don't trust any content provided by untrusted sources. Check email senders and check domain names.
+* Verify commands after pasting, before you execute them.
+* Never run commands you don't understand.
+* Don't run commands that pipe `curl` output directly into `bash` / `Invoke-Expression`. It is easy for an attacker to switch the website you are downloading from.
+* Never open email attachments from untrusted sources.
+* Remember that Evil Fonts rely on tricking an observer to be effective. A user must take an action for Evil Fonts to be a risk. Without taking a risky action, Evil Fonts can't affect you.
+* Don't upload documents created by someone else to AI tools.
+### What can the industry do to protect against Evil Fonts?
+ 
+* Don't allow custom fonts to render in Protected View (Microsoft Office Suite).
+* Don't allow users to bring custom fonts, or limit the number of custom fonts.
+* Treat a large number of custom fonts in a webpage or Word document as a malware signal.
+* Warn users who use `Win + R` with a scary popup saying how this is very risky the first time they do it (idk how this isn't a thing already...).
+* When processing documents with AI, render the document to an image and extract text with OCR. This has the added benefit of protecting against images with text in them.
+* Don't ignore user-supplied fonts in threat models.
+* Treat user-supplied fonts as what they are: untrusted user input.
 
 ---
 
